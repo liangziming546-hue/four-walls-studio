@@ -29,7 +29,6 @@ test('四列滚筒持续旋转、依次停下，最后才显示中奖与库存�
   await page.waitForFunction(()=>document.querySelector('.reel-column')?.getAttribute('data-state')==='stopped',undefined,{polling:'raf'});
   await expect(page.locator('.reel-column').nth(0)).toHaveAttribute('data-state','stopped');
   await expect(page.locator('.reel-column').nth(3)).toHaveAttribute('data-state','spinning');
-  await page.screenshot({path:'.cache/slots-turning.png'});
   await page.keyboard.press('Escape');await expect(page.getByRole('dialog')).toHaveAttribute('aria-label','歇一会儿');
   await page.waitForTimeout(600);await page.getByRole('button',{name:'继续游戏',exact:true}).click();
   await expect(page.locator('#inventory [title="三角形"]')).toContainText('19');

@@ -21,9 +21,9 @@ test('从第一人称移动到画桌，实际描画并收取，背包和暂停�
   const paper=page.locator('#paper'),rect=(await paper.boundingBox())!;
   const path=outline('triangle');const first=path[0];
   await page.mouse.move(rect.x+first.x*rect.width,rect.y+first.y*rect.height);await page.mouse.down();
-  for(let i=0;i<=path.length;i+=3){const p=path[i%path.length];await page.mouse.move(rect.x+p.x*rect.width,rect.y+p.y*rect.height);await page.waitForTimeout(230);}
-  await page.mouse.move(rect.x+first.x*rect.width,rect.y+first.y*rect.height);await page.waitForTimeout(3000);await page.mouse.up();
-  await expect(page.locator('#collect')).toBeEnabled();await page.locator('#collect').click();
+  for(let i=0;i<=path.length;i+=6){const p=path[i%path.length];await page.mouse.move(rect.x+p.x*rect.width,rect.y+p.y*rect.height);}
+  await page.mouse.move(rect.x+first.x*rect.width,rect.y+first.y*rect.height);await page.mouse.up();
+  await expect(page.locator('#collect')).toHaveCount(0);
   await expect(page.locator('#inventory')).toContainText('3');
   await page.getByRole('button',{name:'关闭',exact:true}).click();
   await page.keyboard.press('b');await expect(page.getByRole('dialog')).toHaveAttribute('aria-label','随身背包');

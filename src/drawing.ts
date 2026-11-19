@@ -1,5 +1,15 @@
 import { Shape } from './game';
 export type Point = { x: number; y: number };
+export function traceOutline(path: Point[], progress: number): Point[] {
+  if (!path.length) return [];
+  const closed = [...path, path[0]], position = Math.max(0, Math.min(1, progress)) * path.length;
+  const index = Math.min(path.length, Math.floor(position)), result = closed.slice(0, index + 1);
+  if (index < path.length) {
+    const a = closed[index], b = closed[index + 1], t = position - index;
+    result.push({ x: a.x + (b.x-a.x)*t, y: a.y + (b.y-a.y)*t });
+  }
+  return result;
+}
 export function outline(shape: Shape): Point[] {
   let vertices: Point[];
   if (shape === 'circle') vertices = Array.from({length: 97}, (_, i) => ({ x: .5 + .32 * Math.cos(i / 96 * Math.PI * 2 - Math.PI / 2), y: .5 + .32 * Math.sin(i / 96 * Math.PI * 2 - Math.PI / 2) }));

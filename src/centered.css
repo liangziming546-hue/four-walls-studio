@@ -1,0 +1,78 @@
+/* Controls stay centred; prose lives exclusively in the contextual help dialog. */
+.topbar{justify-content:center;gap:40px;position:relative}
+.hud-toolbar{position:absolute;right:30px;top:20px;display:flex;gap:9px;pointer-events:auto}
+.hud-toolbar .icon-button{width:36px;height:36px;padding:0;background:#20363ccc}
+.panel,.intro{text-align:center}
+.panel-header{justify-content:flex-end;align-items:center;gap:9px;min-height:35px;margin:0 0 15px}
+.explain-button{width:35px;height:35px;padding:0;border:1px solid #8ba79a55;border-radius:6px;background:#30474b66;color:#dfd8b8;font-weight:600;font-size:19px}
+.panel-footer{justify-content:center;gap:28px;margin-top:20px;padding-top:13px}
+.intro{position:relative;left:auto!important;right:auto!important;top:auto;transform:none;max-width:600px;width:min(600px,100%);padding:24px 42px 42px!important;border:1px solid #bba77855;border-radius:15px;background:linear-gradient(135deg,#1c343bee,#142b34f5)}
+.intro h1{margin-top:20px;margin-bottom:40px}
+.intro-actions{justify-content:center;flex-wrap:wrap}
+.intro h1 span{letter-spacing:.35em;text-indent:.35em}
+.task-card{text-align:center}
+.task-card h2{justify-content:center;gap:18px}
+.task-row{justify-content:center;gap:24px}
+.task-card .eyebrow{display:none}
+.tabs{justify-content:center;flex-wrap:wrap}
+.tab-content{max-width:900px;margin:0 auto}
+.two-column{grid-template-columns:minmax(0,1fr) minmax(0,1fr);max-width:830px;margin:0 auto}
+.section-label{font-size:16px;font-weight:500;letter-spacing:.06em;color:#dac39c;margin:5px 0 17px}
+.delivery-row{justify-content:center;gap:16px;flex-wrap:wrap}
+.sell-row{justify-content:center;gap:25px}
+.product-grid{display:flex;flex-wrap:wrap;justify-content:center;gap:17px}
+.product{flex:0 1 230px;align-items:center;min-height:180px;padding:22px 18px}
+.product-symbol{margin-bottom:12px}.product button{margin-top:auto}
+.product h3{font-weight:500;line-height:1.5}
+.bank-input{justify-content:center;max-width:430px;margin:22px auto}
+.bank-input input{flex:0 1 250px;text-align:center}
+.button-row{justify-content:center}.button-row>*{flex:0 1 220px}
+.bank-summary{margin:15px auto;font-size:14px;color:#b7c8bd}
+.bank-summary b{color:#e5c18b}
+.shop-panel .tab-content>.full{max-width:360px;display:block;margin:20px auto 0}
+.bag-panel{max-width:730px}.bag-supplies{max-width:580px;margin:0 auto}
+.bag-panel .info-box{max-width:580px;margin:22px auto}.bag-panel .info-box button{margin:10px}
+.skills{justify-content:center;gap:32px;flex-wrap:wrap}
+.skills>div{align-items:center}
+.summary-grid{display:flex;flex-wrap:wrap;justify-content:center;gap:18px;margin:25px auto;max-width:560px}
+.summary-grid>div{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-width:94px;padding:13px 9px;border:1px solid #98b2a326;border-radius:6px;background:#142b3233}
+.summary-grid span{font-size:13px;color:#aebfb6}.summary-grid b{font-size:18px;color:#e2c596;font-weight:500}
+.center-status{margin:20px 0;font-size:20px;color:#e9d5ac;line-height:1.7}
+.volume{justify-content:center}.volume input{max-width:260px}
+.panel.narrow>.full{max-width:340px;display:block;margin:18px auto}
+.panel.narrow>.text-button{display:block;margin:18px auto 0;padding:10px}
+.slot-panel{width:740px!important;padding:20px 24px!important}
+.slot-panel .slot-layout{display:block!important;width:min(650px,100%);margin:0 auto}
+.slot-cabinet{margin:0 auto}
+.slot-cabinet .stake-heading{justify-content:center;gap:22px}
+.slot-cabinet .bet-and-spin{justify-content:center;gap:28px}
+.slot-cabinet .outlet-heading{justify-content:center;gap:18px}
+.slot-cabinet .machine-readouts>div{justify-content:center}
+.cabinet-feet{justify-content:center;gap:30px}
+.slot-cabinet .slot-marquee>span{min-height:12px}
+.drawing-panel{width:600px!important;padding:20px 28px}
+.drawing-layout{display:flex!important;flex-direction:column;align-items:center;gap:12px;max-width:460px;margin:0 auto}
+.work-shapes{width:min(420px,100%);margin:0 auto 2px}
+.work-shapes .shape-choice{padding:7px 3px;font-size:27px}
+.work-shapes .shape-choice small{margin-top:5px}
+.drawing-board{padding:13px;align-self:center;width:min(420px,100%);margin:0 auto}
+#draw-metrics{width:min(420px,100%)}
+.drawing-progress-label{display:flex;justify-content:center;gap:25px;align-items:center;margin:0 0 8px;font-size:14px;color:#c1d0c4}
+.drawing-progress-label b{font-weight:500;color:#e6c58f;font-variant-numeric:tabular-nums}
+.draw-actions{display:flex;justify-content:center;gap:14px;width:min(420px,100%)}
+.draw-actions>button{flex:1;padding:12px 9px}
+#auto-draw{touch-action:none;user-select:none}
+#auto-draw.holding{background:#c5ad7d;box-shadow:inset 0 3px 6px #243d3c55;transform:translateY(1px)}
+.tool-levels{justify-content:center;gap:18px;width:100%;margin:0;padding-top:12px}
+.tool-levels span{white-space:nowrap}
+#drawing-count{color:#e2c393}
+#explanation-layer{position:fixed;inset:0;z-index:30;background:#081821ba;backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:24px}
+#explanation-layer[hidden]{display:none}
+.explanation-window{width:640px;max-height:calc(100dvh - 48px);padding:22px 28px}
+.explanation-content{max-width:550px;margin:0 auto 15px}
+.explanation-content article{padding:15px 10px;border-top:1px solid #9ab0a52b}
+.explanation-content article:first-child{border-top:0;padding-top:5px}
+.explanation-content h3{font-size:18px;color:#e5c490;margin-bottom:12px}
+.explanation-content p{font-size:15px;line-height:1.9;color:#c1d1c6;margin:0}
+@media(max-height:850px){.drawing-panel{padding:14px 22px}.drawing-panel .panel-header{margin-bottom:8px}.drawing-layout{gap:9px}.drawing-board{width:min(330px,100%);padding:11px}.work-shapes{width:min(350px,100%)}.work-shapes .shape-choice{padding:5px 3px;font-size:23px}.work-shapes .shape-choice small{font-size:12px}.draw-actions>button{padding:10px 8px}.drawing-panel .tool-levels{padding-top:9px}.drawing-panel .panel-footer{margin-top:12px}.slot-panel{padding:14px 20px!important}.slot-panel .panel-header{margin-bottom:8px}.slot-panel .slot-cabinet .slot-machine{--slot-cell:54px}.hud-toolbar{top:14px}}
+@media(max-width:700px){.panel{padding:18px;max-height:calc(100dvh - 32px)}.intro{padding:18px 24px 34px!important}.intro h1{font-size:3rem}.panel-header{margin-bottom:12px}.two-column{grid-template-columns:1fr;gap:20px}.product{flex-basis:190px;min-height:160px}.tabs button{padding:10px 11px}.drawing-panel{width:560px!important}.drawing-board{width:min(360px,100%)}.tool-levels{gap:12px}.hud-toolbar{right:15px}.topbar{gap:20px;padding-right:100px}.summary-grid{gap:10px}.summary-grid>div{min-width:80px}.skills{gap:22px}.slot-panel{width:740px!important}.explanation-window{padding:18px}.explanation-content p{font-size:14px}}

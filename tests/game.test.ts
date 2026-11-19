@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fresh, quota, counts, sum, SHAPES, deliver, sleep, spin, roll, evaluate, transfer, buy, sell, upgrade, useItem, decode, tick, drawingStats, finishDrawing, revealSpin, claimSlotPayout, slotOutcome, slotWinChance, slotBonus, type SlotSymbol, type Bet } from '../src/game.ts';
 import { REEL_STOP_TIMES, SPIN_DURATION, reelPose } from '../src/slot-reels.ts';
-import { outline, assess } from '../src/drawing.ts';
+import { outline, assess, traceOutline } from '../src/drawing.ts';
 
 test('分批交付先补旧欠，工资只发一次', () => {
   const s=fresh();s.debt.triangle=1;
@@ -151,4 +151,11 @@ test('存档完整往返、损坏与旧版本存档安全回退', () => {
 });
 test('四种图形精确描画合格，空白、乱画、不连贯端点不合格', () => {
   for(const shape of SHAPES){const path=outline(shape);assert.equal(assess(path,[[...path,path[0]]]).valid,true);assert.equal(assess(path,[]).valid,false);assert.equal(assess(path,[[{x:0,y:0},{x:1,y:1}]]).valid,false);assert.equal(assess(path,path.map(p=>[p])).valid,false);}
+});
+test('自动描画逐步覆盖四种轮廓，完整路径与手动画图使用同一验收标准',()=>{
+  for(const shape of SHAPES){
+    const path=outline(shape);const partial=traceOutline(path,.4),complete=traceOutline(path,1);
+    assert.equal(assess(path,[partial]).valid,false);assert.equal(assess(path,[complete]).valid,true);
+    assert.deepEqual(complete[0],complete.at(-1));assert.ok(partial.length<complete.length);
+  }
 });
