@@ -2,6 +2,7 @@
 .topbar{justify-content:center;gap:40px;position:relative}
 .hud-toolbar{position:absolute;right:30px;top:20px;display:flex;gap:9px;pointer-events:auto}
 .hud-toolbar .icon-button{width:36px;height:36px;padding:0;background:#20363ccc}
+.save-button,.hud-toolbar .save-button{width:62px;height:35px;padding:0;font-size:14px}
 .panel,.intro{text-align:center}
 .panel-header{justify-content:flex-end;align-items:center;gap:9px;min-height:35px;margin:0 0 15px}
 .explain-button{width:35px;height:35px;padding:0;border:1px solid #8ba79a55;border-radius:6px;background:#30474b66;color:#dfd8b8;font-weight:600;font-size:19px}

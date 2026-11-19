@@ -16,7 +16,7 @@ export const SLOT_SYMBOLS: readonly SlotSymbol[] = [...SHAPES, 'bomb'];
 export const SLOT_INFO = { ...INFO, bomb: { name: '炸弹', symbol: '💣', color: '#e57762' } };
 export interface SlotRound {
   day: number; stake: Shape; multiplier: Bet; grid: SlotSymbol[][];
-  wins: SlotWin[]; refund: boolean; bomb: boolean; payouts: Counts; lossesBefore: number;
+  wins: SlotWin[]; refund: boolean; refundLine?: SlotRefundLine; bomb: boolean; payouts: Counts; lossesBefore: number;
 }
 export interface SlotState { losses: number; lockedDay: number; tray: Counts; round: SlotRound | null; last: SlotRound | null }
 const freshSlot = (): SlotState => ({ losses: 0, lockedDay: 0, tray: counts(), round: null, last: null });
@@ -111,12 +111,22 @@ export function transfer(s: State, amount: number, deposit: boolean) {
   if (deposit ? s.coins < amount : s.bank < amount) return false;
   s.coins += deposit ? -amount : amount; s.bank += deposit ? amount : -amount; return true;
 }
-export interface SlotWin { row: number; shape: Shape; length: number; reward: number }
+export interface SlotWin { row: number; start: number; shape: Shape; length: number; reward: number }
+export interface SlotRefundLine { row: number; start: number }
 export const SLOT_BETS: readonly Bet[] = [1, 5, 10];
 export const SLOT_PITY_STEP = .015;
 export const SLOT_PITY_CAP = 10;
 export const slotBonus = (losses: number) => Math.min(SLOT_PITY_CAP, Math.max(0, losses)) * SLOT_PITY_STEP;
-const slotMatchChance = (losses: number) => Math.sqrt((.09 + slotBonus(losses)) / (.8 * (1 - .2 * .3 ** 3) ** 2));
+// Count both 0..2 and 1..3, subtracting their shared four-of-a-kind once.
+// Calibrate transitions so allowing either starting column keeps the advertised
+// 9% base chance and +1.5 percentage points per loss.
+const lineChance = (match: number) => (1.54 * match ** 2 - .6 * match ** 3) * (1 - .2 * .3 ** 3) ** 2;
+const matchChances = Array.from({ length: SLOT_PITY_CAP + 1 }, (_, losses) => {
+  let lo = 0, hi = 1; const target = .09 + losses * SLOT_PITY_STEP;
+  for (let n = 0; n < 48; n++) { const mid = (lo + hi) / 2; if (lineChance(mid) < target) lo = mid; else hi = mid; }
+  return (lo + hi) / 2;
+});
+const slotMatchChance = (losses: number) => matchChances[Math.min(SLOT_PITY_CAP, Math.max(0, Math.floor(losses)))];
 // Bombs have a fixed transition chance, so loss protection never raises the
 // four-bomb risk. Other rows' bombs override a normal winning line.
 export const slotWinChance = (losses: number) => .09 + slotBonus(losses);
@@ -134,21 +144,28 @@ export function roll(random = Math.random, losses = 0): SlotSymbol[][] {
 }
 export function activeSlotRows(charms: Charm[]) { return [1, ...(charms.includes('top') ? [0] : []), ...(charms.includes('bottom') ? [2] : [])]; }
 export function hasBombLine(grid: SlotSymbol[][]) { return grid.some(row => row.length === 4 && row.every(symbol => symbol === 'bomb')); }
+export function slotRuns(line: SlotSymbol[]) {
+  const runs: { start: number; length: number; symbol: SlotSymbol }[] = [];
+  for (let start = 0; start < line.length;) {
+    let end = start + 1; while (end < line.length && line[end] === line[start]) end++;
+    runs.push({ start, length: end - start, symbol: line[start] }); start = end;
+  }
+  return runs;
+}
 export function evaluate(grid: SlotSymbol[][], charms: Charm[]): SlotWin[] {
   if (hasBombLine(grid)) return [];
   const rows = activeSlotRows(charms);
-  return rows.flatMap(row => {
-    const line = grid[row]; let length = 1; while (length < 4 && line[length] === line[0]) length++;
-    return length >= 3 && line[0] !== 'bomb' ? [{ row, shape: line[0], length, reward: length === 4 ? 15 : 5 + (charms.includes('triple') ? 1 : 0) }] : [];
-  });
+  return rows.flatMap(row => slotRuns(grid[row]).flatMap(run => run.length >= 3 && run.symbol !== 'bomb'
+    ? [{ row, start: run.start, shape: run.symbol, length: run.length, reward: run.length === 4 ? 15 : 5 + (charms.includes('triple') ? 1 : 0) }] : []));
 }
 export function slotOutcome(s: State, stake: Shape, multiplier: Bet, grid: SlotSymbol[][]): SlotRound {
   const bomb = hasBombLine(grid), payouts = counts();
   const wins = evaluate(grid, s.charms).map(win => ({ ...win, reward: win.reward * multiplier }));
-  const refund = !bomb && !wins.length && activeSlotRows(s.charms).some(row => grid[row][0] === stake && grid[row][1] === stake && grid[row][2] !== stake);
+  const refundLine = !bomb && !wins.length ? activeSlotRows(s.charms).flatMap(row => slotRuns(grid[row]).filter(run => run.length === 2 && run.symbol === stake).map(run => ({ row, start: run.start })))[0] : undefined;
+  const refund = !!refundLine;
   wins.forEach(win => payouts[win.shape] += win.reward);
   if (refund) payouts[stake] = multiplier;
-  return { day: s.day, stake, multiplier, grid, wins, refund, bomb, payouts, lossesBefore: s.slot.losses };
+  return { day: s.day, stake, multiplier, grid, wins, refund, ...(refundLine ? { refundLine } : {}), bomb, payouts, lossesBefore: s.slot.losses };
 }
 // Save the paid round before animation. Revealing moves prizes into the tray;
 // only an explicit collection credits inventory. All three steps are idempotent.
@@ -194,7 +211,10 @@ export function decode(raw: string | null): State | null {
       if (!round || !integer(round.day) || round.day < 1 || round.day > s.day || !SHAPES.includes(round.stake) || !SLOT_BETS.includes(round.multiplier) || !integer(round.lossesBefore)) return null;
       if (!Array.isArray(round.grid) || round.grid.length !== 3 || round.grid.some(row => !Array.isArray(row) || row.length !== 4 || row.some(symbol => !SLOT_SYMBOLS.includes(symbol)))) return null;
       if (!validCounts(round.payouts) || typeof round.bomb !== 'boolean' || typeof round.refund !== 'boolean' || !Array.isArray(round.wins)) return null;
-      if (round.wins.some(win => !integer(win.row) || win.row > 2 || !SHAPES.includes(win.shape) || ![3, 4].includes(win.length) || !integer(win.reward) || win.reward < 1)) return null;
+      // Old saved rounds only supported start=0; preserve their recorded prizes.
+      round.wins.forEach(win => { if (win.start === undefined) win.start = 0; });
+      if (round.wins.some(win => !integer(win.row) || win.row > 2 || !integer(win.start) || win.start + win.length > 4 || !SHAPES.includes(win.shape) || ![3, 4].includes(win.length) || !integer(win.reward) || win.reward < 1)) return null;
+      if (round.refundLine && (!integer(round.refundLine.row) || round.refundLine.row > 2 || !integer(round.refundLine.start) || round.refundLine.start > 2)) return null;
     }
     return s;
   } catch { return null; }

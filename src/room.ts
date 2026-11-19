@@ -24,7 +24,7 @@ export class Room {
     this.build();
     addEventListener('resize', () => { this.camera.aspect=innerWidth/innerHeight; this.camera.updateProjectionMatrix(); this.renderer.setSize(innerWidth,innerHeight);this.lastView=''; });
     document.addEventListener('pointerlockchange', () => { this.keys.clear(); });
-    addEventListener('keydown', e => { if (!['INPUT','SELECT'].includes((e.target as HTMLElement).tagName)) this.keys.add(e.code); });
+    addEventListener('keydown', e => { if (!e.ctrlKey && !e.metaKey && !e.altKey && !['INPUT','SELECT'].includes((e.target as HTMLElement).tagName)) this.keys.add(e.code); });
     addEventListener('keyup', e => this.keys.delete(e.code)); addEventListener('blur', () => this.keys.clear());
     addEventListener('mousemove', e => { if (this.locked) { this.yaw -= e.movementX*.002; this.pitch = THREE.MathUtils.clamp(this.pitch-e.movementY*.002,-1.15,1.15); } });
   }

@@ -1,4 +1,4 @@
-import { SLOT_INFO, SLOT_SYMBOLS, type SlotSymbol, type SlotWin } from './game';
+import { SLOT_INFO, SLOT_SYMBOLS, type SlotSymbol, type SlotWin, type SlotRefundLine } from './game';
 
 const FACE_COUNT = 16;
 const FACE_ANGLE = 360 / FACE_COUNT;
@@ -54,13 +54,22 @@ export class SlotReels {
     this.stopped = count;
     return count;
   }
-  highlight(activeRows: number[], wins: SlotWin[] = [], bomb = false) {
+  highlight(activeRows: number[], wins: SlotWin[] = [], bomb = false, refundLine?: SlotRefundLine) {
     this.host.querySelectorAll<HTMLElement>('.slot-payline').forEach(line => {
       const row = Number(line.dataset.row);
       line.classList.toggle('enabled', activeRows.includes(row));
       line.classList.toggle('winning', wins.some(win => win.row === row));
       line.classList.toggle('bomb-line', bomb && (this.result ?? this.previous)[row].every(symbol=>symbol==='bomb'));
+      const win = wins.find(win => win.row === row), refunded = refundLine?.row === row;
+      line.classList.toggle('refund-line', refunded);
+      const start = win?.start ?? (refunded ? refundLine!.start : 0), length = win?.length ?? (refunded ? 2 : 4);
+      line.style.left = `calc((100% + var(--reel-gap)) * ${start / 4})`;
+      line.style.width = `calc((100% + var(--reel-gap)) * ${length / 4} - var(--reel-gap))`;
+      line.style.right = 'auto';
     });
-    this.columns.forEach((column, col) => column.classList.toggle('winning-column', wins.some(win => col < win.length)));
+    this.columns.forEach((column, col) => {
+      column.classList.toggle('winning-column', wins.some(win => col >= win.start && col < win.start + win.length));
+      column.classList.toggle('refunding-column', !!refundLine && col >= refundLine.start && col < refundLine.start + 2);
+    });
   }
 }

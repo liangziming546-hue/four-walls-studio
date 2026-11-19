@@ -1,10 +1,11 @@
 .slot-machine{
+  --reel-gap:8px;
   --slot-cell:clamp(70px,7.5vw,102px);
   --reel-radius:calc(var(--slot-cell) * 2.613126);
   position:relative;padding:12px;isolation:isolate;
   background:linear-gradient(120deg,#142b35,#091c24);
 }
-.reel-columns{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.reel-columns{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--reel-gap)}
 .reel-column{
   height:calc(var(--slot-cell) * 3);position:relative;overflow:hidden;
   perspective:1000px;border-radius:8px;background:#162b31;
@@ -30,6 +31,8 @@
 .slot-payline.enabled{border-color:#e8c98a55;background:#ead59b06}
 .slot-payline.winning{border:2px solid #ffdb88;box-shadow:0 0 17px #f4c87480,inset 0 0 20px #f4c87433;animation:payline-glow .7s ease-in-out 3 alternate}
 .winning-column{border-color:#ffdf9e;box-shadow:0 0 15px #efc17a55}
+.slot-payline.refund-line{border:2px solid #95d7ce;box-shadow:0 0 13px #73b9b166,inset 0 0 15px #73b9b122}
+.refunding-column{border-color:#95d7ce}
 .reel-stop-indicators{display:flex;justify-content:center;gap:9px;margin-top:14px}
 .reel-stop-indicators i{display:block;width:24px;height:3px;background:#6e857e55;border-radius:3px;transition:background .15s,box-shadow .15s}
 .reel-stop-indicators i.stopped{background:#e5c18b;box-shadow:0 0 8px #e5c18b55}
@@ -37,7 +40,7 @@
 .slot-panel .side-card p{margin-bottom:17px}
 @keyframes payline-glow{from{opacity:.65}to{opacity:1}}
 @media(max-height:800px){.slot-machine{--slot-cell:78px}.slot-outcome{min-height:48px}.slot-panel .shape-options{margin:10px 0}.slot-panel .side-card{padding:18px}}
-@media(max-width:700px){.slot-machine{--slot-cell:clamp(58px,12vw,80px);padding:8px}.slot-paylines{inset:8px}.reel-columns{gap:5px}.reel-symbol{font-size:42px}}
+@media(max-width:700px){.slot-machine{--reel-gap:5px;--slot-cell:clamp(58px,12vw,80px);padding:8px}.slot-paylines{inset:8px}.reel-columns{gap:5px}.reel-symbol{font-size:42px}}
 
 /* A brass cabinet, glass reel window, mechanical controls and a physical tray. */
 .slot-panel{width:1120px!important;padding:22px 26px}

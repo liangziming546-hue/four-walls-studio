@@ -34,10 +34,15 @@ test('老虎机只消耗图形，四连不重复计算；三行挂件独立生�
   const copied=grid.map(row=>[...row]);assert.deepEqual(evaluate(copied,[]).map(w=>w.reward),[5]);assert.deepEqual(evaluate(copied,['top','bottom','triple']).map(w=>w.reward),[6,6]);
   s.inventory.circle=0;assert.equal(spin(s,'circle'),null);
 });
-test('从最左列起才中奖；连线抽样能产生所有图形', () => {
+test('末三格连续也中奖；四联只结算一次，未开启行不派奖', () => {
   const grid=[['circle','star','star','star'],['circle','star','star','star'],['circle','star','star','star']] as const;
-  assert.equal(evaluate(grid.map(row=>[...row]),['top','bottom']).length,0);
-  let i=0;const samples=[0,.36,.55,.7];const s=fresh();const r=spin(s,'circle',1,()=>samples[i++%4])!;assert.deepEqual(r.grid[0],SHAPES);
+  assert.deepEqual(evaluate(grid.map(row=>[...row]),['top','bottom']).map(w=>[w.row,w.start,w.length,w.reward]),[[1,1,3,5],[0,1,3,5],[2,1,3,5]]);
+  assert.deepEqual(evaluate(grid.map(row=>[...row]),[]).map(w=>w.row),[1]);
+  const four:SlotSymbol[][]=Array.from({length:3},()=>['star','star','star','star']);
+  assert.deepEqual(evaluate(four,[]),[{row:1,start:0,shape:'star',length:4,reward:15}]);
+});
+test('连线抽样能产生所有图形', () => {
+  let i=0;const samples=[0,.3,.5,.7];const s=fresh();const r=spin(s,'circle',1,()=>samples[i++%4])!;assert.deepEqual(r.grid[0],SHAPES);
 });
 
 test('基础中奖率约9%，三连四连均有，四种图形机会均衡', () => {
@@ -49,7 +54,7 @@ test('基础中奖率约9%，三连四连均有，四种图形机会均衡', () 
     grid[1].forEach(s=>{if(s!=='bomb')symbols[s]++;});
   }
   assert.ok(Math.abs(wins/trials-.09)<.003,`Observed win rate: ${wins/trials}`);
-  assert.ok(Math.abs(fours/trials-.0304)<.002,`Observed four rate: ${fours/trials}`);
+  assert.ok(fours/trials>.01&&fours/trials<.02,`Observed four rate: ${fours/trials}`);
   for(const s of SHAPES)assert.ok(Math.abs(symbols[s]/sum(symbols)-.25)<.004);
 });
 
@@ -69,6 +74,28 @@ test('二联图形不符不退款，三联优先于其他行的二联',()=>{
   assert.equal(slotOutcome(s,'square',5,pair).refund,false);
   pair[1]=['star','star','star','circle'];
   const round=slotOutcome(s,'triangle',10,pair);assert.equal(round.refund,false);assert.equal(round.payouts.star,50);assert.equal(round.payouts.triangle,0);
+});
+test('中间、末尾二联以及两对中的后对可返还，隔开的同形不算',()=>{
+  const s=fresh();
+  for(const [line,start] of [
+    [['circle','triangle','triangle','star'],1],
+    [['circle','star','triangle','triangle'],2],
+    [['circle','circle','triangle','triangle'],2],
+  ] as [SlotSymbol[],number][]){
+    const grid:SlotSymbol[][]=[['star','square','circle','triangle'],line,['star','circle','square','triangle']];
+    const round=slotOutcome(s,'triangle',10,grid);
+    assert.equal(round.refund,true);assert.deepEqual(round.refundLine,{row:1,start});assert.equal(round.payouts.triangle,10);
+  }
+  const grid:SlotSymbol[][]=[['triangle','triangle','circle','square'],['triangle','circle','triangle','star'],['star','circle','square','triangle']];
+  assert.equal(slotOutcome(s,'triangle',1,grid).refund,false);
+});
+test('末尾三联优先于二联并按倍率奖励，奖金保留到点击领取',()=>{
+  const s=fresh();s.charms=['top','triple'];s.slot.losses=7;
+  const grid:SlotSymbol[][]=[['triangle','triangle','circle','square'],['circle','star','star','star'],['star','circle','square','triangle']];
+  s.slot.round=slotOutcome(s,'triangle',5,grid);
+  assert.equal(s.slot.round.refund,false);assert.deepEqual(s.slot.round.wins,[{row:1,start:1,shape:'star',length:3,reward:30}]);
+  revealSpin(s);assert.equal(s.slot.losses,0);assert.equal(s.slot.tray.star,30);assert.equal(s.inventory.star,2);
+  claimSlotPayout(s);assert.equal(s.inventory.star,32);
 });
 test('连续失败提高概率并封顶，真正中奖后清零',()=>{
   const s=fresh();
@@ -121,6 +148,16 @@ test('连败保护提升实际中奖率，同时不提高四联炸弹概率',()=
     const base=roll(random,0),boost=roll(random,10);normal+=Number(evaluate(base,[]).length>0);boosted+=Number(evaluate(boost,[]).length>0);bombs+=Number(boost.some(row=>row.every(symbol=>symbol==='bomb')));
   }
   assert.ok(Math.abs(normal/trials-.09)<.004);assert.ok(Math.abs(boosted/trials-.24)<.006);assert.ok(Math.abs(bombs/trials-.0161)<.003);
+});
+test('旧中奖记录补齐起始列，末尾中奖记录完整恢复，越界起始列拒绝',()=>{
+  const s=fresh();s.slot.round=slotOutcome(s,'triangle',1,winningGrid);
+  const legacy=JSON.parse(JSON.stringify(s));delete legacy.slot.round.wins[0].start;
+  assert.equal(decode(JSON.stringify(legacy))!.slot.round!.wins[0].start,0);
+  const grid:SlotSymbol[][]=Array.from({length:3},()=>['circle','star','star','star']);
+  s.slot.round=slotOutcome(s,'star',5,grid);
+  assert.deepEqual(decode(JSON.stringify(s)),s);
+  const invalid=JSON.parse(JSON.stringify(s));invalid.slot.round.wins[0].start=2;
+  assert.equal(decode(JSON.stringify(invalid)),null);
 });
 
 test('卷轴从左到右依次停下，最终角度精确对准三个结果图形', () => {

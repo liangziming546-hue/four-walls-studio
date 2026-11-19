@@ -11,7 +11,7 @@ const app = document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML = `
   <div id="world"></div><div class="vignette"></div>
   <div id="hud" hidden>
-    <header class="topbar"><div class="day-clock"><b id="day"></b><span id="clock"></span></div><div class="wallet"><span class="coin-icon">●</span> <b id="coins"></b><span>金币</span></div><div class="hud-toolbar"><button class="icon-button" id="help-button" aria-label="操作说明">?</button><button class="icon-button" id="pause-button" aria-label="暂停">Ⅱ</button></div></header>
+    <header class="topbar"><div class="day-clock"><b id="day"></b><span id="clock"></span></div><div class="wallet"><span class="coin-icon">●</span> <b id="coins"></b><span>金币</span></div><div class="hud-toolbar"><button class="icon-button save-button" id="save-button" aria-label="保存进度">保存</button><button class="icon-button" id="help-button" aria-label="操作说明">?</button><button class="icon-button" id="pause-button" aria-label="暂停">Ⅱ</button></div></header>
     <aside class="task-card"><div class="eyebrow">TODAY’S COMMISSION</div><h2>今日交付 <span id="task-status"></span></h2><div id="task-list"></div><div id="debt" class="debt"></div><p id="tomorrow"></p></aside>
     <div class="crosshair">·</div><div id="interaction"></div>
     <section class="bottom-left"><div class="stats" id="stats"></div><div class="inventory" id="inventory"></div></section>
@@ -35,7 +35,8 @@ let volume = state.volume, audio: AudioContext | null = null;
 const shapeName = (s: Shape) => `${INFO[s].symbol} ${INFO[s].name}`;
 const shapeChip = (s: Shape, text = '') => `<span class="shape-chip" style="--shape:${INFO[s].color}"><b>${INFO[s].symbol}</b>${text || INFO[s].name}</span>`;
 function toast(message: string) { const el = document.createElement('div'); el.className = 'toast'; el.textContent = message; $('toasts').append(el); setTimeout(() => el.remove(), 4200); }
-function save() { try { state.volume = volume; localStorage.setItem(SAVE_KEY, JSON.stringify(state)); $('save-status').textContent = '进度已保存'; } catch { $('save-status').textContent = '存档不可用 · 请勿关闭页面'; } }
+function save(): boolean { try { state.volume = volume; localStorage.setItem(SAVE_KEY, JSON.stringify(state)); $('save-status').textContent = '进度已保存'; return true; } catch { $('save-status').textContent = '存档不可用 · 请勿关闭页面'; return false; } }
+function manualSave() { toast(save() ? '保存成功' : '保存失败：浏览器存储不可用'); }
 function sound(frequency = 520, duration = .12) {
   if (!volume) return;
   try { audio ??= new AudioContext(); void audio.resume(); const o=audio.createOscillator(),g=audio.createGain(); o.type='sine';o.frequency.value=frequency;g.gain.setValueAtTime(volume*.12,audio.currentTime);g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+duration);o.connect(g);g.connect(audio.destination);o.start();o.stop(audio.currentTime+duration); } catch { /* Audio is optional. */ }
@@ -54,7 +55,7 @@ function intro() {
   $('overlay').innerHTML = `<section class="intro"><div class="panel-header"><button class="explain-button" data-action="explain" aria-label="查看说明">?</button></div><h1>四面之间<span>画室生存记</span></h1><div class="intro-actions"><button class="primary" data-action="start">${loaded?'继续生活':'开始第一天'}</button>${loaded?'<button data-action="reset-ask">重新开始</button>':''}</div></section>`;
 }
 function shell(title: string, eyebrow: string, content: string, cls='') {
-  $('overlay').innerHTML = `<section class="panel ${cls}" data-screen="${modal}" role="dialog" aria-modal="true" aria-label="${title}"><header class="panel-header"><button class="explain-button" data-action="explain" aria-label="查看说明">?</button>${modal!=='result'?'<button class="close" data-action="close" aria-label="关闭">×</button>':''}</header>${content}<footer class="panel-footer"><span>${timeLabel(state.minute)}${paused?' · 暂停':''}</span><span>金币 ${state.coins}</span></footer></section>`;
+  $('overlay').innerHTML = `<section class="panel ${cls}" data-screen="${modal}" role="dialog" aria-modal="true" aria-label="${title}"><header class="panel-header"><button class="save-button" data-action="manual-save" aria-label="保存进度">保存</button><button class="explain-button" data-action="explain" aria-label="查看说明">?</button>${modal!=='result'?'<button class="close" data-action="close" aria-label="关闭">×</button>':''}</header>${content}<footer class="panel-footer"><span>${timeLabel(state.minute)}${paused?' · 暂停':''}</span><span>金币 ${state.coins}</span></footer></section>`;
 }
 function openExplanation() {
   if (explanationOpen) return;
@@ -137,7 +138,7 @@ function renderSlots() {
   </div></div>`,'wide slot-panel');
   slotReels = new SlotReels($('reels'), rolling ? spinStartGrid : spinResult?.grid ?? idleGrid(), rolling ? spinResult!.grid : null, col=>sound(320+col*100,.065));
   stoppedReels = slotReels.update(rolling ? SPIN_DURATION-spinLeft : 0, false);
-  slotReels.highlight(activeSlotRows(state.charms),rolling?[]:spinResult?.wins,!rolling&&locked);
+  slotReels.highlight(activeSlotRows(state.charms),rolling?[]:spinResult?.wins,!rolling&&locked,!rolling?spinResult?.refundLine:undefined);
   updateReelStatus(stoppedReels);
 }
 function updateReelStatus(count: number) {
@@ -215,6 +216,7 @@ $('overlay').addEventListener('click',e=>{
   if(b.dataset.sell){sell(state,b.dataset.sell as Shape);save();hud();renderShop();return;}
   if(b.dataset.use){const shape=$<HTMLSelectElement>('book-shape').value as Shape;useItem(state,b.dataset.use as 'water'|'food'|'books',shape);save();hud();renderBag();return;}
   if(b.dataset.transfer){const n=Number($<HTMLInputElement>('bank-amount').value);if(!transfer(state,n,b.dataset.transfer==='deposit'))toast('金额无效或余额不足');else{save();hud();renderShop();}return;}
+  if(action==='manual-save'){manualSave();return;}
   if(action==='start'){started=true;modal=null;$('hud').hidden=false;$('overlay').innerHTML='';save();hud();if(state.over){lastResult='这段生活已结束，你可以从第一天重新开始。';open('result');return;}if(state.slot.round){open('slots');return;}room.lock();return;}
   if(action==='close'||action==='resume'){if(spinLeft){modal='slots';paused=false;renderSlots();}else close();return;}
   if(action==='bag'){open('bag');return;}
@@ -238,7 +240,7 @@ $('overlay').addEventListener('click',e=>{
   }
 });
 $('overlay').addEventListener('input',e=>{if((e.target as HTMLElement).id==='volume'){volume=Number((e.target as HTMLInputElement).value);save();}});
-$('pause-button').onclick=()=>open('pause');$('bag-button').onclick=()=>open('bag');$('help-button').onclick=()=>openExplanation();
+$('pause-button').onclick=()=>open('pause');$('bag-button').onclick=()=>open('bag');$('help-button').onclick=()=>openExplanation();$('save-button').onclick=manualSave;
 $('explanation-layer').onclick=e=>{if((e.target as HTMLElement).closest('[data-action="close-explanation"]'))closeExplanation();};
 $('world').onclick=()=>{if(started&&!modal){const target=room.locked?room.target():null;if(target){if(target==='work')resetDrawing();if(target==='shop')shopTab='delivery';open(target);}else room.lock();}};
 document.addEventListener('pointerlockchange',()=>{if(started&&!document.pointerLockElement&&!modal&&!explanationOpen){open('pause');}});
@@ -246,6 +248,8 @@ document.addEventListener('visibilitychange',()=>{last=performance.now();if(docu
 addEventListener('blur',()=>{drawingDown=false;autoHeld=false;metrics();});
 addEventListener('beforeunload',()=>{if(started)save();});
 addEventListener('keydown',e=>{
+  if((e.ctrlKey||e.metaKey)&&e.code==='KeyS'){e.preventDefault();if(started&&!e.repeat)manualSave();return;}
+  if(e.ctrlKey||e.metaKey||e.altKey)return;
   if(e.repeat||['INPUT','SELECT'].includes((e.target as HTMLElement).tagName))return;
   if(explanationOpen){if(['Escape','KeyH'].includes(e.code)){e.preventDefault();closeExplanation();}else if(e.code==='Tab'){e.preventDefault();$('explanation-layer').querySelector<HTMLButtonElement>('button')?.focus();}return;}
   if(e.code==='KeyH'){e.preventDefault();openExplanation();return;}

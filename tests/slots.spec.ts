@@ -98,6 +98,43 @@ test('二联返还整笔投入且不改变连败，空奖后连败加一',async(
   expect(saved.slot.losses).toBe(4);expect(saved.slot.tray.triangle).toBe(0);
 });
 
+test('首格不匹配时，末尾三联和中间末尾二联结算且高亮实际位置',async({page})=>{
+  await openSlots(page);
+  const spinSamples=async(samples:number[])=>{
+    await page.evaluate(samples=>{let i=0;Math.random=()=>samples[i++%4];},samples);
+    await page.locator('[data-action="spin"]').click();
+    await expect(page.locator('#reels')).not.toHaveClass(/spinning/,{timeout:10000});
+  };
+  await spinSamples([.65,.35,0,0]);
+  await expect(page.locator('#slot-outcome')).toContainText('3连');
+  await expect(page.locator('.winning-column')).toHaveCount(3);
+  await expect(page.locator('.reel-column').nth(0)).not.toHaveClass(/winning-column/);
+  const first=decode(await page.evaluate(key=>localStorage.getItem(key),SAVE_KEY))!;
+  expect(first.slot.last!.wins[0]).toMatchObject({start:1,length:3,reward:5});
+  expect(first.slot.tray.triangle).toBe(5);expect(first.inventory.triangle).toBe(19);
+  // The bright line must start at the second column, not merely light all four.
+  const line=await page.locator('.slot-payline.winning').boundingBox();
+  const column=await page.locator('.reel-column').nth(1).boundingBox();
+  expect(Math.abs(line!.x-column!.x)).toBeLessThan(2);
+  await page.screenshot({path:'.cache/slots-suffix-win.png'});
+  await page.locator('#payout-tray').click();
+  await expect(page.locator('#inventory [title="三角形"]')).toContainText('24');
+  for(const [samples,start] of [[[.65,.65,.35,0],2],[[.65,.35,0,.65],1]] as [number[],number][]){
+    await spinSamples(samples);
+    await expect(page.locator('#slot-outcome')).toContainText('返还 1');
+    await expect(page.locator('.refunding-column')).toHaveCount(2);
+    await expect(page.locator('.reel-column').nth(0)).not.toHaveClass(/refunding-column/);
+    const saved=decode(await page.evaluate(key=>localStorage.getItem(key),SAVE_KEY))!;
+    expect(saved.slot.last!.refundLine).toEqual({row:1,start});
+    expect(saved.slot.tray.triangle).toBe(1);expect(saved.inventory.triangle).toBe(23);
+    const refund=await page.locator('.slot-payline.refund-line').boundingBox();
+    const column=await page.locator('.reel-column').nth(start).boundingBox();
+    expect(Math.abs(refund!.x-column!.x)).toBeLessThan(2);
+    await page.locator('#payout-tray').click();
+    await expect(page.locator('#inventory [title="三角形"]')).toContainText('24');
+  }
+});
+
 test('四联炸弹当日停机，刷新不能绕过，实际睡到次日恢复',async({page})=>{
   await openSlots(page);
   await page.evaluate(()=>{let i=0;Math.random=()=>[.99,0,0,0][i++%4];});
