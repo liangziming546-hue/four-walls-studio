@@ -98,7 +98,20 @@ export function transfer(s: State, amount: number, deposit: boolean) {
   s.coins += deposit ? -amount : amount; s.bank += deposit ? amount : -amount; return true;
 }
 export interface SlotWin { row: number; shape: Shape; length: number; reward: number }
-export function roll(random = Math.random): Shape[][] { return Array.from({ length: 3 }, () => Array.from({ length: 4 }, () => SHAPES[Math.min(3, Math.floor(random() * 4))])); }
+export const SLOT_MATCH_CHANCE = .3;
+export function roll(random = Math.random): Shape[][] {
+  // Each symbol remains equally likely. Neighbouring columns have a 30% match
+  // chance, giving each enabled line a 9% chance of three-or-more from the left.
+  return Array.from({ length: 3 }, () => {
+    const row: Shape[] = [SHAPES[Math.min(3, Math.floor(random() * 4))]];
+    for (let col = 1; col < 4; col++) {
+      const sample = random(), previous = row[col - 1];
+      const others = SHAPES.filter(shape => shape !== previous);
+      row.push(sample < SLOT_MATCH_CHANCE ? previous : others[Math.min(2, Math.floor((sample - SLOT_MATCH_CHANCE) / (1 - SLOT_MATCH_CHANCE) * 3))]);
+    }
+    return row;
+  });
+}
 export function evaluate(grid: Shape[][], charms: Charm[]): SlotWin[] {
   const rows = [1, ...(charms.includes('top') ? [0] : []), ...(charms.includes('bottom') ? [2] : [])];
   return rows.flatMap(row => {

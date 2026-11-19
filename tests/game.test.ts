@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fresh, quota, counts, sum, SHAPES, deliver, sleep, spin, evaluate, transfer, buy, sell, upgrade, useItem, decode, tick, drawingStats, finishDrawing } from '../src/game.ts';
+import { fresh, quota, counts, sum, SHAPES, deliver, sleep, spin, roll, evaluate, transfer, buy, sell, upgrade, useItem, decode, tick, drawingStats, finishDrawing } from '../src/game.ts';
+import { REEL_STOP_TIMES, SPIN_DURATION, reelPose } from '../src/slot-reels.ts';
 import { outline, assess } from '../src/drawing.ts';
 
 test('分批交付先补旧欠，工资只发一次', () => {
@@ -32,10 +33,34 @@ test('老虎机只消耗图形，四连不重复计算；三行挂件独立生�
   const copied=grid.map(row=>[...row]);assert.deepEqual(evaluate(copied,[]).map(w=>w.reward),[5]);assert.deepEqual(evaluate(copied,['top','bottom','triple']).map(w=>w.reward),[6,6]);
   s.inventory.circle=0;assert.equal(spin(s,'circle'),null);
 });
-test('从最左列起才中奖；独立抽样能产生所有图形', () => {
+test('从最左列起才中奖；连线抽样能产生所有图形', () => {
   const grid=[['circle','star','star','star'],['circle','star','star','star'],['circle','star','star','star']] as const;
   assert.equal(evaluate(grid.map(row=>[...row]),['top','bottom']).length,0);
-  let i=0;const s=fresh();const r=spin(s,'circle',()=>((i++%4)+.1)/4)!;assert.deepEqual(r.grid[0],SHAPES);
+  let i=0;const samples=[0,.31,.54,.77];const s=fresh();const r=spin(s,'circle',()=>samples[i++%4])!;assert.deepEqual(r.grid[0],SHAPES);
+});
+
+test('基础中奖率约9%，三连四连均有，四种图形机会均衡', () => {
+  let seed=83721;
+  const random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};
+  let wins=0,fours=0;const symbols=counts(),trials=100000;
+  for(let i=0;i<trials;i++){
+    const grid=roll(random);const outcome=evaluate(grid,[]);wins+=Number(outcome.length>0);fours+=Number(outcome[0]?.length===4);
+    grid[1].forEach(s=>symbols[s]++);
+  }
+  assert.ok(Math.abs(wins/trials-.09)<.003,`Observed win rate: ${wins/trials}`);
+  assert.ok(Math.abs(fours/trials-.027)<.002,`Observed four rate: ${fours/trials}`);
+  for(const s of SHAPES)assert.ok(Math.abs(symbols[s]/(trials*4)-.25)<.004);
+});
+
+test('卷轴从左到右依次停下，最终角度精确对准三个结果图形', () => {
+  REEL_STOP_TIMES.forEach((stop,col)=>{
+    assert.equal(reelPose(col,stop-.01).stopped,false);
+    assert.equal(reelPose(col,stop).stopped,true);
+    if(col<3)assert.equal(reelPose(col+1,stop).stopped,false);
+    let previous=0;
+    for(let t=0;t<stop;t+=.03){const pose=reelPose(col,t);assert.ok(pose.angle<=previous+.00001);previous=pose.angle;}
+    assert.ok(Math.abs((reelPose(col,SPIN_DURATION).angle+8*22.5)%360)<.00001);
+  });
 });
 test('购买、出售、存取款和使用补给均校验余额', () => {
   const s=fresh();assert.equal(transfer(s,-1,true),false);assert.equal(transfer(s,1.2,true),false);assert.equal(transfer(s,21,true),false);

@@ -1,0 +1,40 @@
+.slot-machine{
+  --slot-cell:clamp(70px,7.5vw,102px);
+  --reel-radius:calc(var(--slot-cell) * 2.613126);
+  position:relative;padding:12px;isolation:isolate;
+  background:linear-gradient(120deg,#142b35,#091c24);
+}
+.reel-columns{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.reel-column{
+  height:calc(var(--slot-cell) * 3);position:relative;overflow:hidden;
+  perspective:1000px;border-radius:8px;background:#162b31;
+  border:1px solid #e6c08866;box-shadow:inset 0 0 18px #071820;
+}
+.reel-cylinder{position:absolute;top:50%;left:0;width:100%;height:0;transform-style:preserve-3d;will-change:transform}
+.reel-symbol{
+  position:absolute;top:calc(var(--slot-cell) * -.46);left:0;width:100%;height:calc(var(--slot-cell) * .92);
+  display:flex;align-items:center;justify-content:center;border-radius:7px;
+  transform:rotateX(var(--face-angle)) translateZ(var(--reel-radius));backface-visibility:hidden;
+  background:linear-gradient(100deg,#b8c0ad,#f4ead0 25%,#ece5ca 70%,#c0c7b4);
+  border:1px solid #fbf5dcbb;box-shadow:inset 0 2px 3px #fff7,inset 0 -3px 5px #68786544;
+  color:#344e56;font-size:clamp(40px,4.5vw,64px);line-height:1;
+}
+.reel-symbol::before{content:'';position:absolute;inset:8px;border:1px solid var(--shape);opacity:.48;border-radius:5px}
+.reel-symbol span{transform:translateZ(1px);text-shadow:0 2px 0 #fffa,0 0 10px var(--shape)}
+.reel-column[data-state=spinning] .reel-symbol{filter:blur(.7px)}
+.reel-shade,.reel-glint{position:absolute;inset:0;pointer-events:none;z-index:2}
+.reel-shade{background:linear-gradient(#06171be6,#142b3155 15%,transparent 35%,transparent 65%,#142b3155 85%,#06171be6);box-shadow:inset 0 0 14px #08202b99}
+.reel-glint{background:linear-gradient(100deg,transparent 20%,#fffae616 35%,transparent 52%)}
+.slot-paylines{position:absolute;inset:12px;pointer-events:none;z-index:3}
+.slot-payline{position:absolute;left:0;right:0;top:calc(var(--row) * var(--slot-cell));height:var(--slot-cell);border:1px solid transparent;border-radius:7px}
+.slot-payline.enabled{border-color:#e8c98a55;background:#ead59b06}
+.slot-payline.winning{border:2px solid #ffdb88;box-shadow:0 0 17px #f4c87480,inset 0 0 20px #f4c87433;animation:payline-glow .7s ease-in-out 3 alternate}
+.winning-column{border-color:#ffdf9e;box-shadow:0 0 15px #efc17a55}
+.reel-stop-indicators{display:flex;justify-content:center;gap:9px;margin-top:14px}
+.reel-stop-indicators i{display:block;width:24px;height:3px;background:#6e857e55;border-radius:3px;transition:background .15s,box-shadow .15s}
+.reel-stop-indicators i.stopped{background:#e5c18b;box-shadow:0 0 8px #e5c18b55}
+.slot-outcome{min-height:64px;padding-top:13px}
+.slot-panel .side-card p{margin-bottom:17px}
+@keyframes payline-glow{from{opacity:.65}to{opacity:1}}
+@media(max-height:800px){.slot-machine{--slot-cell:78px}.slot-outcome{min-height:48px}.slot-panel .shape-options{margin:10px 0}.slot-panel .side-card{padding:18px}}
+@media(max-width:700px){.slot-machine{--slot-cell:clamp(58px,12vw,80px);padding:8px}.slot-paylines{inset:8px}.reel-columns{gap:5px}.reel-symbol{font-size:42px}}

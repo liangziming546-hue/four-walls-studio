@@ -1,7 +1,9 @@
 import './style.css';
+import './slots.css';
 import { Room, STATION_NAMES, type Station } from './room';
-import { SHAPES, INFO, CONFIG, PRODUCTS, SAVE_KEY, fresh, decode, quota, sum, timeLabel, tick, drawingStats, proficiency, finishDrawing, deliver, sleep, buy, useItem, upgrade, transfer, sell, spin, type Shape } from './game';
+import { SHAPES, INFO, CONFIG, PRODUCTS, SAVE_KEY, fresh, decode, quota, sum, timeLabel, tick, drawingStats, proficiency, finishDrawing, deliver, sleep, buy, useItem, upgrade, transfer, sell, spin, type Shape, type Counts } from './game';
 import { outline, assess, type Point } from './drawing';
+import { SlotReels, SPIN_DURATION, idleGrid } from './slot-reels';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML = `
@@ -27,6 +29,7 @@ try { room = new Room($('world')); } catch {
 let started = false, paused = false, modal: Station | 'bag' | 'help' | 'pause' | 'result' | 'reset' | null = null;
 let shopTab = 'delivery', selected: Shape = 'triangle', stake: Shape = 'triangle';
 let spinLeft = 0, spinResult: ReturnType<typeof spin> = null, lastResult = '', saveElapsed = 0;
+let spinStartGrid = idleGrid(), spinStartInventory: Counts | null = null, slotReels: SlotReels | null = null, stoppedReels = 0;
 let volume = state.volume, audio: AudioContext | null = null;
 const shapeName = (s: Shape) => `${INFO[s].symbol} ${INFO[s].name}`;
 const shapeChip = (s: Shape, text = '') => `<span class="shape-chip" style="--shape:${INFO[s].color}"><b>${INFO[s].symbol}</b>${text || INFO[s].name}</span>`;
@@ -44,7 +47,8 @@ function hud() {
   $('debt').innerHTML = sum(state.debt) ? `待补欠额 ${SHAPES.filter(s=>state.debt[s]).map(s=>`${INFO[s].symbol}${state.debt[s]}`).join('　')}<br>连续欠额 ${state.debtDays} / 3 天` : '';
   const tomorrow=quota(state.day+1);$('tomorrow').textContent=`明日：${SHAPES.filter(s=>tomorrow[s]).map(s=>`${INFO[s].symbol} ×${tomorrow[s]}`).join('　')}`;
   $('stats').innerHTML = ([['饥饿',state.hunger,'#d5b77d'],['口渴',state.thirst,'#86bfc8'],['精神',state.energy,'#b0bea1']] as const).map(([name,n,color])=>`<div class="stat"><span>${name}</span><div class="stat-track"><i style="width:${n}%;background:${n<40?'#e69b83':color}"></i></div><b>${Math.round(n)}</b></div>`).join('');
-  $('inventory').innerHTML = SHAPES.map(s=>`<span title="${INFO[s].name}" style="--shape:${INFO[s].color}"><b>${INFO[s].symbol}</b> ${state.inventory[s]}</span>`).join('');
+  const visibleInventory = spinLeft && spinStartInventory ? spinStartInventory : state.inventory;
+  $('inventory').innerHTML = SHAPES.map(s=>`<span title="${INFO[s].name}" style="--shape:${INFO[s].color}"><b>${INFO[s].symbol}</b> ${visibleInventory[s]}</span>`).join('');
 }
 function intro() {
   $('overlay').innerHTML = `<section class="intro"><div class="eyebrow">A SMALL ROOM. ANOTHER DAY.</div><h1>四面之间<span>画室生存记</span></h1><p>一张画桌，一间房子。<br>用画出的形状，换取明天的生活。</p><div class="intro-actions"><button class="primary" data-action="start">${loaded?'继续生活':'开始第一天'}</button>${loaded?'<button data-action="reset-ask">重新开始</button>':''}</div><div class="intro-guide"><span>△ 描画图形</span><span>□ 完成交付</span><span>☆ 把握运气</span><span>○ 好好休息</span></div><small>电脑键盘与鼠标游玩 · 进度自动保存在此浏览器</small></section>`;
@@ -92,8 +96,20 @@ function renderBag() {
   shell('随身背包','YOUR BELONGINGS',`<div class="bag-supplies"><article><h3>◒ 瓶装水 ×${state.water}</h3><p>恢复50口渴</p><button data-use="water" ${!state.water?'disabled':''}>喝水</button></article><article><h3>▣ 便当 ×${state.food}</h3><p>恢复40饥饿</p><button data-use="food" ${!state.food?'disabled':''}>吃便当</button></article></div><div class="info-box"><h3>▤ 绘画技能书 ×${state.books}</h3><label>学习图形 <select id="book-shape">${SHAPES.map(s=>`<option value="${s}">${INFO[s].name}</option>`).join('')}</select></label><button data-use="books" ${!state.books?'disabled':''}>阅读 · 熟练度增加5</button></div><h3>绘画熟练度</h3><div class="skills">${SHAPES.map(s=>`<div>${shapeChip(s)}<b>Lv.${proficiency(state,s)}</b><small>${state.xp[s]} 点经验</small></div>`).join('')}</div><p class="muted">成功完成一张画获得1点经验，每5点提升1级，最高5级。</p>`);
 }
 function renderSlots() {
-  const grid=spinResult?.grid;
-  shell('图形俱乐部','THE SHAPE CLUB',`<div class="slot-layout"><div><div class="slot-marquee">GOOD SHAPES · GOOD LUCK</div><div class="slot-machine ${spinLeft?'spinning':''}" id="reels">${Array.from({length:3},(_,row)=>`<div class="reel-row ${row===1||state.charms.includes(row===0?'top':'bottom')?'enabled':'disabled-line'} ${spinResult?.wins.some(w=>w.row===row)&&!spinLeft?'winning':''}">${Array.from({length:4},(_,col)=>{const s=grid?.[row][col]||SHAPES[(row+col)%4];return `<div class="reel" style="--shape:${INFO[s].color}">${INFO[s].symbol}</div>`;}).join('')}</div>`).join('')}</div><div id="slot-outcome" class="slot-outcome">${spinLeft?'图形正在转动……':spinResult?spinResult.wins.length?spinResult.wins.map(w=>`${['上行','中行','下行'][w.row]} ${w.length}连：${shapeName(w.shape)} +${w.reward}`).join(' · '):'没有连成图形。下次会有好运吗？':'中间行，从最左侧开始，寻找相同形状。'}</div><div class="shape-options">${choice(stake,'data-stake')}</div><button class="primary full" data-action="spin" ${spinLeft||!state.inventory[stake]?'disabled':''}>${spinLeft?'旋转中……':`投入1块${INFO[stake].name} · 开始旋转`}</button></div><aside class="side-card"><h3>奖励规则</h3><div class="payout"><span>同图形三连</span><b>${state.charms.includes('triple')?6:5} 块</b></div><div class="payout"><span>同图形四连</span><b>15 块</b></div><p>奖励为连线对应的图形块。四连只领取四连奖励。</p><p>四种图形等概率，各格独立。基础仅中间行生效，必须从最左列连续。</p><h3>已装备挂件</h3><p>${state.charms.length?state.charms.map(c=>PRODUCTS[c].name).join('、'):'暂无 · 可在商店购买'}</p><p class="warning-text">会损失投入的图形块，请为每日交付留足材料。</p></aside></div>`,'wide slot-panel');
+  const rolling = spinLeft > 0;
+  const outcome = rolling ? '四列卷轴转动中……' : spinResult ? spinResult.wins.length
+    ? spinResult.wins.map(w=>`${['上行','中行','下行'][w.row]} ${w.length}连：${shapeName(w.shape)} +${w.reward}`).join(' · ')
+    : '没有连成图形。下次会有好运吗？' : '中间行，从最左侧开始，寻找相同形状。';
+  const options = choice(stake,'data-stake');
+  shell('图形俱乐部','THE SHAPE CLUB',`<div class="slot-layout"><div><div class="slot-marquee">GOOD SHAPES · GOOD LUCK</div><div class="slot-machine ${rolling?'spinning':''}" id="reels" aria-busy="${rolling}"></div><div class="reel-stop-indicators" aria-hidden="true">${Array.from({length:4},()=>'<i></i>').join('')}</div><div id="slot-outcome" class="slot-outcome" role="status">${outcome}</div><div class="shape-options">${rolling?options.replaceAll('<button ','<button disabled '):options}</div><button class="primary full" data-action="spin" ${rolling||!state.inventory[stake]?'disabled':''}>${rolling?'卷轴转动中……':`投入1块${INFO[stake].name} · 开始旋转`}</button></div><aside class="side-card"><h3>奖励规则</h3><div class="payout"><span>同图形三连</span><b>${state.charms.includes('triple')?6:5} 块</b></div><div class="payout"><span>同图形四连</span><b>15 块</b></div><p>奖励为连线对应的图形块。四连只领取四连奖励。</p><p>基础中间行中奖机会 <b>9%</b>。四种图形出现机会相同，必须从最左列连续。</p><p>四列从左到右依次停稳后，显示本次奖励。Esc 可以暂停。</p><h3>已装备挂件</h3><p>${state.charms.length?state.charms.map(c=>PRODUCTS[c].name).join('、'):'暂无 · 可在商店购买'}</p><p class="warning-text">会损失投入的图形块，请为每日交付留足材料。</p></aside></div>`,'wide slot-panel');
+  slotReels = new SlotReels($('reels'), rolling ? spinStartGrid : spinResult?.grid ?? idleGrid(), rolling ? spinResult!.grid : null, col=>sound(320+col*100,.065));
+  stoppedReels = slotReels.update(rolling ? SPIN_DURATION-spinLeft : 0, false);
+  slotReels.highlight([1,...(state.charms.includes('top')?[0]:[]),...(state.charms.includes('bottom')?[2]:[])],rolling?[]:spinResult?.wins);
+  updateReelStatus(stoppedReels);
+}
+function updateReelStatus(count: number) {
+  document.querySelectorAll('.reel-stop-indicators i').forEach((light,col)=>light.classList.toggle('stopped',spinLeft?col<count:!!spinResult));
+  if(spinLeft)$('slot-outcome').textContent=count ? count<4?`第 ${count} 列已停下，等待其余卷轴……`:'卷轴已停稳，正在揭晓奖励……' : '四列卷轴转动中……';
 }
 
 let strokes: Point[][]=[], drawingDown=false, drawSeconds=0, drawPath=outline(selected), lastAssessment={coverage:0,deviation:1,valid:false}, pointer:Point={x:0,y:0}, assessElapsed=0;
@@ -149,12 +165,18 @@ $('overlay').addEventListener('click',e=>{
   if(action==='help'){open('help');return;}
   if(action==='reset-ask'){open('reset');return;}
   if(action==='cancel-reset'){if(started)open('pause');else close();return;}
-  if(action==='reset'){state=fresh();volume=state.volume;loaded=false;started=true;spinLeft=0;spinResult=null;resetDrawing();room.camera.position.set(0,1.65,3.7);room.yaw=0;room.pitch=-.08;$('hud').hidden=false;save();close();hud();return;}
+  if(action==='reset'){state=fresh();volume=state.volume;loaded=false;started=true;spinLeft=0;spinResult=null;spinStartInventory=null;slotReels=null;resetDrawing();room.camera.position.set(0,1.65,3.7);room.yaw=0;room.pitch=-.08;$('hud').hidden=false;save();close();hud();return;}
   if(action==='clear-drawing'){resetDrawing();paint();metrics();return;}
   if(action==='collect'){lastAssessment=assess(drawPath,strokes,drawingStats(state,selected).tolerance);if(lastAssessment.valid&&drawSeconds>=drawingStats(state,selected).seconds){finishDrawing(state,selected);toast(`完成${INFO[selected].name} +1 · 熟练度 +1`);sound(760,.2);save();hud();resetDrawing();renderWork();}return;}
   if(action==='deliver'){const r=deliver(state);toast(`交付 ${r.delivered} 块${r.wage?`，工资 +${r.wage} 金币`:''}`);save();hud();renderShop();return;}
   if(action==='sleep'){settleDay();return;}
-  if(action==='spin'){const result=spin(state,stake);if(result){spinResult=result;spinLeft=2.2;save();hud();renderSlots();sound(250,.2);}return;}
+  if(action==='spin'){
+    if(spinLeft)return;
+    const visibleInventory={...state.inventory};
+    const result=spin(state,stake);
+    if(result){spinStartGrid=spinResult?.grid??idleGrid();spinStartInventory=visibleInventory;spinStartInventory[stake]--;spinResult=result;spinLeft=SPIN_DURATION;save();hud();renderSlots();sound(250,.2);}
+    return;
+  }
 });
 $('overlay').addEventListener('input',e=>{if((e.target as HTMLElement).id==='volume'){volume=Number((e.target as HTMLInputElement).value);save();}});
 $('pause-button').onclick=()=>open('pause');$('bag-button').onclick=()=>open('bag');$('help-button').onclick=()=>open('help');
@@ -164,7 +186,7 @@ document.addEventListener('visibilitychange',()=>{last=performance.now();if(docu
 addEventListener('beforeunload',()=>{if(started)save();});
 addEventListener('keydown',e=>{
   if(!started||e.repeat||['INPUT','SELECT'].includes((e.target as HTMLElement).tagName))return;
-  if(e.code==='Escape'){e.preventDefault();if(modal==='result'||modal==='reset')return;if(modal)close();else open('pause');}
+  if(e.code==='Escape'){e.preventDefault();if(modal==='result'||modal==='reset')return;if(spinLeft){if(paused){modal='slots';paused=false;renderSlots();}else open('pause');}else if(modal)close();else open('pause');}
   if(e.code==='KeyE'&&!modal&&room.locked){const t=room.target();if(t){if(t==='work')resetDrawing();if(t==='shop')shopTab='delivery';open(t);}}
   if(e.code==='KeyB'&&!spinLeft&&modal!=='result'){if(modal==='bag')close();else open('bag');}
   if(e.code==='KeyH'&&!spinLeft&&modal!=='result'){if(modal==='help')close();else open('help');}
@@ -179,7 +201,11 @@ function frame(now:number){
       if(drawingDown){drawSeconds+=dt;sampleInk();paint();}
       assessElapsed+=dt;if(assessElapsed>.2){assessElapsed=0;lastAssessment=assess(drawPath,strokes,drawingStats(state,selected).tolerance);metrics();}
     }
-    if(spinLeft){spinLeft=Math.max(0,spinLeft-dt);if(!spinLeft){if(modal==='slots')renderSlots();sound(spinResult?.wins.length?820:240,.25);}}
+    if(spinLeft){
+      spinLeft=Math.max(0,spinLeft-dt);
+      if(modal==='slots'&&slotReels){const count=slotReels.update(SPIN_DURATION-spinLeft);if(count!==stoppedReels){stoppedReels=count;updateReelStatus(count);}}
+      if(!spinLeft){spinStartInventory=null;if(modal==='slots')renderSlots();hud();sound(spinResult?.wins.length?820:240,.25);}
+    }
     if(state.minute>=CONFIG.dayEnd&&!spinLeft)settleDay(true);
     if(saveElapsed>5){saveElapsed=0;save();}
   }
