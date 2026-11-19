@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fresh, quota, counts, sum, SHAPES, deliver, sleep, spin, roll, evaluate, transfer, buy, sell, upgrade, useItem, decode, tick, drawingStats, finishDrawing } from '../src/game.ts';
+import { fresh, quota, counts, sum, SHAPES, deliver, sleep, spin, roll, evaluate, transfer, buy, sell, upgrade, useItem, decode, tick, drawingStats, finishDrawing, revealSpin, claimSlotPayout, slotOutcome, slotWinChance, slotBonus, type SlotSymbol, type Bet } from '../src/game.ts';
 import { REEL_STOP_TIMES, SPIN_DURATION, reelPose } from '../src/slot-reels.ts';
 import { outline, assess } from '../src/drawing.ts';
 
@@ -28,7 +28,8 @@ test('30天交付模拟无重复工资、负库存或结息偏差', () => {
 });
 test('老虎机只消耗图形，四连不重复计算；三行挂件独立生效', () => {
   const s=fresh();const coins=s.coins;s.charms=['top','bottom','triple'];
-  const r=spin(s,'square',()=>0)!;assert.equal(s.coins,coins);assert.equal(s.inventory.square,1);assert.equal(s.inventory.triangle,47);assert.equal(r.wins.length,3);
+  const r=spin(s,'square',1,()=>0)!;assert.equal(s.coins,coins);assert.equal(s.inventory.square,1);assert.equal(s.inventory.triangle,2);assert.equal(r.wins.length,3);
+  revealSpin(s);assert.equal(s.slot.tray.triangle,45);assert.equal(s.inventory.triangle,2);claimSlotPayout(s);assert.equal(s.inventory.triangle,47);
   const grid=[['triangle','triangle','triangle','circle'],['star','star','star','circle'],['square','square','circle','square']] as const;
   const copied=grid.map(row=>[...row]);assert.deepEqual(evaluate(copied,[]).map(w=>w.reward),[5]);assert.deepEqual(evaluate(copied,['top','bottom','triple']).map(w=>w.reward),[6,6]);
   s.inventory.circle=0;assert.equal(spin(s,'circle'),null);
@@ -36,7 +37,7 @@ test('老虎机只消耗图形，四连不重复计算；三行挂件独立生�
 test('从最左列起才中奖；连线抽样能产生所有图形', () => {
   const grid=[['circle','star','star','star'],['circle','star','star','star'],['circle','star','star','star']] as const;
   assert.equal(evaluate(grid.map(row=>[...row]),['top','bottom']).length,0);
-  let i=0;const samples=[0,.31,.54,.77];const s=fresh();const r=spin(s,'circle',()=>samples[i++%4])!;assert.deepEqual(r.grid[0],SHAPES);
+  let i=0;const samples=[0,.36,.55,.7];const s=fresh();const r=spin(s,'circle',1,()=>samples[i++%4])!;assert.deepEqual(r.grid[0],SHAPES);
 });
 
 test('基础中奖率约9%，三连四连均有，四种图形机会均衡', () => {
@@ -45,11 +46,81 @@ test('基础中奖率约9%，三连四连均有，四种图形机会均衡', () 
   let wins=0,fours=0;const symbols=counts(),trials=100000;
   for(let i=0;i<trials;i++){
     const grid=roll(random);const outcome=evaluate(grid,[]);wins+=Number(outcome.length>0);fours+=Number(outcome[0]?.length===4);
-    grid[1].forEach(s=>symbols[s]++);
+    grid[1].forEach(s=>{if(s!=='bomb')symbols[s]++;});
   }
   assert.ok(Math.abs(wins/trials-.09)<.003,`Observed win rate: ${wins/trials}`);
-  assert.ok(Math.abs(fours/trials-.027)<.002,`Observed four rate: ${fours/trials}`);
-  for(const s of SHAPES)assert.ok(Math.abs(symbols[s]/(trials*4)-.25)<.004);
+  assert.ok(Math.abs(fours/trials-.0304)<.002,`Observed four rate: ${fours/trials}`);
+  for(const s of SHAPES)assert.ok(Math.abs(symbols[s]/sum(symbols)-.25)<.004);
+});
+
+const losingGrid:SlotSymbol[][]=[['triangle','square','star','circle'],['triangle','square','circle','star'],['square','circle','star','triangle']];
+const winningGrid:SlotSymbol[][]=[['triangle','square','star','circle'],['triangle','triangle','triangle','circle'],['square','circle','star','triangle']];
+test('同投注二联返还整笔投入，只返还一次且不改变连败',()=>{
+  const s=fresh();s.inventory.triangle=20;s.slot.losses=4;s.charms=['top','bottom'];
+  let i=0;const samples=[0,0,.99,.5];const round=spin(s,'triangle',5,()=>samples[i++%4])!;
+  assert.equal(round.refund,true);assert.equal(s.inventory.triangle,15);assert.equal(sum(s.slot.tray),0);
+  revealSpin(s);assert.equal(s.slot.tray.triangle,5);assert.equal(s.slot.losses,4);assert.equal(s.inventory.triangle,15);
+  assert.equal(spin(s,'triangle'),null);claimSlotPayout(s);assert.equal(s.inventory.triangle,20);
+  assert.equal(sum(claimSlotPayout(s)),0);assert.equal(revealSpin(s),null);
+});
+test('二联图形不符不退款，三联优先于其他行的二联',()=>{
+  const s=fresh();s.charms=['top'];
+  const pair:SlotSymbol[][]=[['triangle','triangle','circle','square'],['star','square','circle','triangle'],['star','circle','square','triangle']];
+  assert.equal(slotOutcome(s,'square',5,pair).refund,false);
+  pair[1]=['star','star','star','circle'];
+  const round=slotOutcome(s,'triangle',10,pair);assert.equal(round.refund,false);assert.equal(round.payouts.star,50);assert.equal(round.payouts.triangle,0);
+});
+test('连续失败提高概率并封顶，真正中奖后清零',()=>{
+  const s=fresh();
+  for(let n=1;n<=14;n++){
+    s.slot.round=slotOutcome(s,'square',1,losingGrid);revealSpin(s);
+    assert.equal(s.slot.losses,n);assert.ok(Math.abs(slotWinChance(n)-(.09+.015*Math.min(n,10)))<1e-10);
+  }
+  assert.equal(slotBonus(s.slot.losses),.15);
+  s.slot.round=slotOutcome(s,'triangle',1,winningGrid);revealSpin(s);assert.equal(s.slot.losses,0);assert.equal(s.slot.tray.triangle,5);
+});
+test('炸弹任意行四联优先取消全部奖励，停机到次日',()=>{
+  const s=fresh();const grid:SlotSymbol[][]=[['bomb','bomb','bomb','bomb'],['triangle','triangle','triangle','triangle'],['square','circle','star','triangle']];
+  const round=slotOutcome(s,'triangle',10,grid);assert.equal(round.bomb,true);assert.deepEqual(round.wins,[]);assert.equal(sum(round.payouts),0);
+  s.slot.round=round;revealSpin(s);assert.equal(s.slot.lockedDay,1);assert.equal(spin(s,'triangle'),null);
+  const restored=decode(JSON.stringify(s))!;assert.equal(restored.slot.lockedDay,1);sleep(restored);assert.equal(restored.day,2);assert.equal(restored.slot.lockedDay,0);assert.ok(spin(restored,'triangle'));
+});
+test('1/5/10倍投入、奖励和挂件加成都按同一倍率，余额不足不扣款',()=>{
+  for(const multiplier of [1,5,10] as const){
+    const s=fresh();s.inventory.triangle=20;s.charms=['triple'];
+    const round=spin(s,'triangle',multiplier,()=>0)!;assert.equal(s.inventory.triangle,20-multiplier);assert.equal(round.payouts.triangle,15*multiplier);
+    assert.equal(spin(s,'triangle'),null);assert.equal(sleep(s).blocked,true);revealSpin(s);assert.equal(s.inventory.triangle,20-multiplier);claimSlotPayout(s);assert.equal(s.inventory.triangle,20+14*multiplier);
+    assert.equal(slotOutcome(s,'triangle',multiplier,winningGrid).payouts.triangle,6*multiplier);
+  }
+  const poor=fresh();assert.equal(spin(poor,'triangle',10),null);assert.equal(spin(poor,'triangle',2 as Bet),null);assert.equal(poor.inventory.triangle,2);
+});
+test('未领取出币跨日保留，领奖后才进入库存',()=>{
+  const s=fresh();s.slot.round=slotOutcome(s,'triangle',5,winningGrid);revealSpin(s);
+  assert.equal(s.slot.tray.triangle,25);sleep(s);assert.equal(s.slot.tray.triangle,25);assert.equal(s.inventory.triangle,2);
+  claimSlotPayout(s);assert.equal(s.inventory.triangle,27);assert.equal(sum(s.slot.tray),0);
+});
+test('多条线产出不同图形时，托盘分别存放且一次领取各自入账',()=>{
+  const s=fresh();s.charms=['top','bottom'];
+  const grid:SlotSymbol[][]=[['triangle','triangle','triangle','square'],['star','star','star','star'],['circle','circle','circle','square']];
+  s.slot.round=slotOutcome(s,'square',5,grid);revealSpin(s);
+  assert.deepEqual(s.slot.tray,{triangle:25,square:0,star:75,circle:25});claimSlotPayout(s);
+  assert.deepEqual(s.inventory,{triangle:27,square:2,star:77,circle:27});assert.equal(sum(claimSlotPayout(s)),0);
+});
+test('旧存档无损升级，未完成抽奖可恢复且不会重复扣款或派奖',()=>{
+  const old=fresh();old.coins=123;const data=JSON.parse(JSON.stringify(old));delete data.slot;
+  const migrated=decode(JSON.stringify(data))!;assert.equal(migrated.coins,123);assert.deepEqual(migrated.slot,fresh().slot);
+  const s=fresh();s.inventory.triangle=20;spin(s,'triangle',10,()=>0);
+  const restored=decode(JSON.stringify(s))!;assert.equal(restored.inventory.triangle,10);assert.ok(restored.slot.round);revealSpin(restored);assert.equal(restored.inventory.triangle,10);assert.equal(restored.slot.tray.triangle,150);assert.equal(revealSpin(restored),null);
+  const waiting=decode(JSON.stringify(restored))!;claimSlotPayout(waiting);assert.equal(waiting.inventory.triangle,160);claimSlotPayout(waiting);assert.equal(waiting.inventory.triangle,160);
+  const invalid=JSON.parse(JSON.stringify(s));invalid.slot.round.grid[0][0]='invalid';assert.equal(decode(JSON.stringify(invalid)),null);
+});
+test('连败保护提升实际中奖率，同时不提高四联炸弹概率',()=>{
+  let seed=7891;const random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};
+  const trials=60000;let normal=0,boosted=0,bombs=0;
+  for(let i=0;i<trials;i++){
+    const base=roll(random,0),boost=roll(random,10);normal+=Number(evaluate(base,[]).length>0);boosted+=Number(evaluate(boost,[]).length>0);bombs+=Number(boost.some(row=>row.every(symbol=>symbol==='bomb')));
+  }
+  assert.ok(Math.abs(normal/trials-.09)<.004);assert.ok(Math.abs(boosted/trials-.24)<.006);assert.ok(Math.abs(bombs/trials-.0161)<.003);
 });
 
 test('卷轴从左到右依次停下，最终角度精确对准三个结果图形', () => {

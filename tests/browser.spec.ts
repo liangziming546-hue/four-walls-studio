@@ -35,15 +35,17 @@ test('从第一人称移动到画桌，实际描画并收取，背包和暂停�
 
 test('商店交易和存款，老虎机动画结算，床和次日恢复',async({page})=>{
   await page.goto('/');await page.getByRole('button',{name:'开始第一天'}).click();
-  await page.waitForTimeout(300);await walk(page,'w',1230);await look(page,Math.PI/2/.002,80);await approach(page,'商店');
+  await page.waitForTimeout(300);await look(page,Math.atan2(5.8,3.7)/.002);await approach(page,'商店');
   await expect(page.locator('#interaction')).toContainText('商店');await page.keyboard.press('e');
   await page.getByRole('button',{name:'交付可用图形',exact:false}).click();await expect(page.locator('#task-list')).toContainText('2');
   await page.getByRole('button',{name:'补给',exact:true}).click();await page.locator('[data-buy="water"]').click();
   await page.getByRole('button',{name:'存款',exact:true}).click();await page.locator('#bank-amount').fill('10');await page.getByRole('button',{name:'存入金币',exact:true}).click();await expect(page.locator('.bank-balance')).toContainText('10');
   await page.screenshot({path:'.cache/shop.png'});
   await page.getByRole('button',{name:'关闭',exact:true}).click();
-  // Walk west across the room, turn toward the cabinet.
-  await look(page,-Math.PI/.002);await approach(page,'老虎机');
+  // Reopen the saved game before visiting the cabinet, also verifying trades persist.
+  await page.reload();await page.getByRole('button',{name:'继续生活'}).click();
+  await expect.poll(()=>page.evaluate(()=>!!document.pointerLockElement)).toBe(true);await page.waitForTimeout(250);
+  await look(page,-Math.atan2(5.8,3.7)/.002);await approach(page,'老虎机');
   await expect(page.locator('#interaction')).toContainText('老虎机');await page.keyboard.press('e');
   await page.locator('[data-stake="star"]').click();await page.locator('[data-action="spin"]').click();
   await expect(page.locator('#reels')).toHaveClass(/spinning/);await expect(page.locator('#reels')).not.toHaveClass(/spinning/,{timeout:10000});

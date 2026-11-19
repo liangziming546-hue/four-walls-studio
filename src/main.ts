@@ -1,7 +1,7 @@
 import './style.css';
 import './slots.css';
 import { Room, STATION_NAMES, type Station } from './room';
-import { SHAPES, INFO, CONFIG, PRODUCTS, SAVE_KEY, fresh, decode, quota, sum, timeLabel, tick, drawingStats, proficiency, finishDrawing, deliver, sleep, buy, useItem, upgrade, transfer, sell, spin, type Shape, type Counts } from './game';
+import { SHAPES, INFO, CONFIG, PRODUCTS, SAVE_KEY, fresh, decode, quota, sum, timeLabel, tick, drawingStats, proficiency, finishDrawing, deliver, sleep, buy, useItem, upgrade, transfer, sell, spin, revealSpin, claimSlotPayout, activeSlotRows, SLOT_BETS, slotBonus, slotWinChance, type Shape, type Bet, type SlotRound } from './game';
 import { outline, assess, type Point } from './drawing';
 import { SlotReels, SPIN_DURATION, idleGrid } from './slot-reels';
 
@@ -27,9 +27,9 @@ try { room = new Room($('world')); } catch {
   throw new Error('WebGL unavailable');
 }
 let started = false, paused = false, modal: Station | 'bag' | 'help' | 'pause' | 'result' | 'reset' | null = null;
-let shopTab = 'delivery', selected: Shape = 'triangle', stake: Shape = 'triangle';
-let spinLeft = 0, spinResult: ReturnType<typeof spin> = null, lastResult = '', saveElapsed = 0;
-let spinStartGrid = idleGrid(), spinStartInventory: Counts | null = null, slotReels: SlotReels | null = null, stoppedReels = 0;
+let shopTab = 'delivery', selected: Shape = 'triangle', stake: Shape = state.slot.round?.stake ?? 'triangle', bet: Bet = state.slot.round?.multiplier ?? 1;
+let spinLeft = state.slot.round ? SPIN_DURATION : 0, spinResult: SlotRound | null = state.slot.round ?? state.slot.last, lastResult = '', saveElapsed = 0;
+let spinStartGrid = state.slot.last?.grid ?? idleGrid(), slotReels: SlotReels | null = null, stoppedReels = 0;
 let volume = state.volume, audio: AudioContext | null = null;
 const shapeName = (s: Shape) => `${INFO[s].symbol} ${INFO[s].name}`;
 const shapeChip = (s: Shape, text = '') => `<span class="shape-chip" style="--shape:${INFO[s].color}"><b>${INFO[s].symbol}</b>${text || INFO[s].name}</span>`;
@@ -47,8 +47,7 @@ function hud() {
   $('debt').innerHTML = sum(state.debt) ? `待补欠额 ${SHAPES.filter(s=>state.debt[s]).map(s=>`${INFO[s].symbol}${state.debt[s]}`).join('　')}<br>连续欠额 ${state.debtDays} / 3 天` : '';
   const tomorrow=quota(state.day+1);$('tomorrow').textContent=`明日：${SHAPES.filter(s=>tomorrow[s]).map(s=>`${INFO[s].symbol} ×${tomorrow[s]}`).join('　')}`;
   $('stats').innerHTML = ([['饥饿',state.hunger,'#d5b77d'],['口渴',state.thirst,'#86bfc8'],['精神',state.energy,'#b0bea1']] as const).map(([name,n,color])=>`<div class="stat"><span>${name}</span><div class="stat-track"><i style="width:${n}%;background:${n<40?'#e69b83':color}"></i></div><b>${Math.round(n)}</b></div>`).join('');
-  const visibleInventory = spinLeft && spinStartInventory ? spinStartInventory : state.inventory;
-  $('inventory').innerHTML = SHAPES.map(s=>`<span title="${INFO[s].name}" style="--shape:${INFO[s].color}"><b>${INFO[s].symbol}</b> ${visibleInventory[s]}</span>`).join('');
+  $('inventory').innerHTML = SHAPES.map(s=>`<span title="${INFO[s].name}" style="--shape:${INFO[s].color}"><b>${INFO[s].symbol}</b> ${state.inventory[s]}</span>`).join('');
 }
 function intro() {
   $('overlay').innerHTML = `<section class="intro"><div class="eyebrow">A SMALL ROOM. ANOTHER DAY.</div><h1>四面之间<span>画室生存记</span></h1><p>一张画桌，一间房子。<br>用画出的形状，换取明天的生活。</p><div class="intro-actions"><button class="primary" data-action="start">${loaded?'继续生活':'开始第一天'}</button>${loaded?'<button data-action="reset-ask">重新开始</button>':''}</div><div class="intro-guide"><span>△ 描画图形</span><span>□ 完成交付</span><span>☆ 把握运气</span><span>○ 好好休息</span></div><small>电脑键盘与鼠标游玩 · 进度自动保存在此浏览器</small></section>`;
@@ -57,7 +56,7 @@ function shell(title: string, eyebrow: string, content: string, cls='') {
   $('overlay').innerHTML = `<section class="panel ${cls}" role="dialog" aria-modal="true" aria-label="${title}"><header class="panel-header"><div><div class="eyebrow">${eyebrow}</div><h1>${title}</h1></div>${modal!=='result'?'<button class="close" data-action="close" aria-label="关闭">×</button>':''}</header>${content}<footer class="panel-footer"><span>${paused?'时间已暂停':'时间正在流逝'} · ${timeLabel(state.minute)}</span><span>${modal==='work'?'按住左键沿虚线描画':'Esc 关闭 / 暂停'} · 金币 ${state.coins}</span></footer></section>`;
 }
 function open(next: NonNullable<typeof modal>) {
-  if (spinLeft && next !== 'pause') { toast('请等待本次旋转结束'); return; }
+  if (spinLeft && next !== 'pause' && next !== 'slots') { toast('请等待本次旋转结束'); return; }
   modal=next; paused=next==='pause'||next==='help'||next==='reset'||next==='result';room.unlock();drawingDown=false;
   renderPanel();hud();
 }
@@ -74,7 +73,7 @@ function renderPanel() {
   if (modal==='bed') shell('今天，做到这里吧','REST & RECOVER',`<div class="sleep-art">☾</div><p class="lead">现在是 ${timeLabel(state.minute)}，明天又是新的一天。</p><div class="info-box">22:00前入睡，次日精神恢复至100。之后每晚睡1小时少恢复10点，最低60。<br>当前预计恢复：<b>${Math.round(Math.max(60,100-Math.max(0,state.minute-1320)/60*10))}</b></div><div class="info-box ${sum(state.due)-sum(state.paid)+sum(state.debt)?'warning':''}">今日待交 ${sum(state.due)-sum(state.paid)} 块 · 旧欠 ${sum(state.debt)} 块<br>${sum(state.due)-sum(state.paid)+sum(state.debt)?'未交部分将记入欠额，连续3个日结仍欠额将结束游戏。':'今天的任务已完成，可以安心休息。'}</div><button class="primary full" data-action="sleep">确认睡觉，结束今天</button>`);
   if (modal==='letters') shell('留给外面的信','LETTERS',`<div class="letter-paper"><span>亲爱的，</span><p>这里有一张画桌。<br>我每天画一些形状，换一些食物。<br>如果有一天你收到这封信……</p><span class="muted">写信功能将在后续开放。</span></div>`);
   if (modal==='bag') renderBag();
-  if (modal==='help') shell('房间里的生活指南','HOW TO PLAY',`<div class="help-grid"><article><h3>走近，开始生活</h3><p>WASD移动，鼠标观察。看向附近物品，按E互动。B打开背包，Esc暂停；点击画面恢复鼠标控制。</p></article><article><h3>△ 工作区</h3><p>选图形，按住左键沿虚线描画。覆盖90%以上、偏差合格并完成作画时间后收取。画笔、手部控制和熟练度能改善绘画。</p></article><article><h3>□ 补给与交付</h3><p>每日轮换两种图形。交付优先偿还旧欠，当日交足自动领薪。多余图形每块卖3金币。水和食物需在背包使用。</p></article><article><h3>☆ 图形俱乐部</h3><p>每次投入1块图形，查看中间行从左起的连续图形。三连得5块，四连得15块。挂件可以开启其他行或增加奖励。</p></article><article><h3>○ 休息区</h3><p>一天约15分钟，凌晨02:00强制睡觉。越早休息，次日精神越好。连续3个日结仍有欠额，游戏结束。</p></article><article><h3>给明天做准备</h3><p>存款每天结算10%利息，向下取整。饥饿、口渴、精神低于40影响绘画。暂停或切到其他页面时，时间停止。</p></article></div><button class="primary full" data-action="close">明白了</button>`);
+  if (modal==='help') shell('房间里的生活指南','HOW TO PLAY',`<div class="help-grid"><article><h3>走近，开始生活</h3><p>WASD移动，鼠标观察。看向附近物品，按E互动。B打开背包，Esc暂停；点击画面恢复鼠标控制。</p></article><article><h3>△ 工作区</h3><p>选图形，按住左键沿虚线描画。覆盖90%以上、偏差合格并完成作画时间后收取。画笔、手部控制和熟练度能改善绘画。</p></article><article><h3>□ 补给与交付</h3><p>每日轮换两种图形。交付优先偿还旧欠，当日交足自动领薪。多余图形每块卖3金币。水和食物需在背包使用。</p></article><article><h3>☆ 图形俱乐部</h3><p>可选1/5/10倍投入与奖励。连线从左起，三联得5倍、四联得15倍；没有三/四联时同投注图形二联返还投入。未中提升概率，中奖清零。任意横排四联炸弹，当日停机。奖励需点击出币口领取。</p></article><article><h3>○ 休息区</h3><p>一天约15分钟，凌晨02:00强制睡觉。越早休息，次日精神越好。连续3个日结仍有欠额，游戏结束。</p></article><article><h3>给明天做准备</h3><p>存款每天结算10%利息，向下取整。饥饿、口渴、精神低于40影响绘画。暂停或切到其他页面时，时间停止。</p></article></div><button class="primary full" data-action="close">明白了</button>`);
   if (modal==='pause') shell('歇一会儿','TAKE A BREATH',`<p class="lead">房间会等你回来。</p><button class="primary full" data-action="resume">继续游戏</button><button class="full" data-action="help">操作指南</button><label class="volume">音效音量 <input id="volume" aria-label="音效音量" type="range" min="0" max="1" step="0.05" value="${volume}"></label><p class="muted">画笔 Lv.${state.pen} · 手部控制 Lv.${state.hand} · 存款 ${state.bank} 金币</p><button class="text-button" data-action="reset-ask">重新开始游戏</button>`,'narrow');
   if (modal==='reset') shell('重新开始这段生活？','NEW BEGINNING',`<p class="lead">将清除当前浏览器中的游戏进度，从第一天重新开始。</p><div class="button-row"><button data-action="cancel-reset">保留进度</button><button class="danger" data-action="reset">确认重新开始</button></div>`,'narrow');
   if (modal==='result') shell(state.over?'这段生活，暂时结束了':'新的一天，开始了',state.over?'END OF THIS CHAPTER':'A NEW DAY',`<div class="sleep-art">${state.over?'◇':'☀'}</div><p class="lead">${lastResult}</p><div class="info-box">${state.over?`你坚持到了第 ${state.day} 天。连续3个日结仍有欠额。`:`第 ${state.day} 天 · 08:00<br>饥饿 ${Math.round(state.hunger)} · 口渴 ${Math.round(state.thirst)} · 精神 ${Math.round(state.energy)}<br>待补欠额 ${sum(state.debt)} 块 · 连续欠额 ${state.debtDays}/3 天`}</div><button class="primary full" data-action="${state.over?'reset':'close'}">${state.over?'重新开始':'迎接今天'}</button>`,'narrow');
@@ -97,14 +96,29 @@ function renderBag() {
 }
 function renderSlots() {
   const rolling = spinLeft > 0;
-  const outcome = rolling ? '四列卷轴转动中……' : spinResult ? spinResult.wins.length
-    ? spinResult.wins.map(w=>`${['上行','中行','下行'][w.row]} ${w.length}连：${shapeName(w.shape)} +${w.reward}`).join(' · ')
-    : '没有连成图形。下次会有好运吗？' : '中间行，从最左侧开始，寻找相同形状。';
+  if (!rolling) spinResult = state.slot.last;
+  const locked = state.slot.lockedDay === state.day, tray = state.slot.tray, prize = sum(tray), canChoose = !rolling && !locked && !prize;
+  if ((prize || locked) && spinResult) { stake = spinResult.stake; bet = spinResult.multiplier; }
+  const losses = rolling ? spinResult!.lossesBefore : state.slot.losses;
+  const outcome = rolling ? '四列卷轴转动中……' : locked ? '四联炸弹！机台今日停用，次日恢复。' : spinResult ? spinResult.wins.length
+    ? spinResult.wins.map(w=>`${['上行','中行','下行'][w.row]} ${w.length}连：${shapeName(w.shape)} +${w.reward}`).join(' · ') + (prize ? ' · 请从出币口领取' : ' · 已领取')
+    : spinResult.refund ? `同图形二联 · 返还 ${spinResult.multiplier} 块${INFO[spinResult.stake].name}${prize?'，请点击领取':'，已领取'}`
+    : '本次未连中，连败保护已提升。' : '选择图形与倍率，按下红色按钮开始。';
   const options = choice(stake,'data-stake');
-  shell('图形俱乐部','THE SHAPE CLUB',`<div class="slot-layout"><div><div class="slot-marquee">GOOD SHAPES · GOOD LUCK</div><div class="slot-machine ${rolling?'spinning':''}" id="reels" aria-busy="${rolling}"></div><div class="reel-stop-indicators" aria-hidden="true">${Array.from({length:4},()=>'<i></i>').join('')}</div><div id="slot-outcome" class="slot-outcome" role="status">${outcome}</div><div class="shape-options">${rolling?options.replaceAll('<button ','<button disabled '):options}</div><button class="primary full" data-action="spin" ${rolling||!state.inventory[stake]?'disabled':''}>${rolling?'卷轴转动中……':`投入1块${INFO[stake].name} · 开始旋转`}</button></div><aside class="side-card"><h3>奖励规则</h3><div class="payout"><span>同图形三连</span><b>${state.charms.includes('triple')?6:5} 块</b></div><div class="payout"><span>同图形四连</span><b>15 块</b></div><p>奖励为连线对应的图形块。四连只领取四连奖励。</p><p>基础中间行中奖机会 <b>9%</b>。四种图形出现机会相同，必须从最左列连续。</p><p>四列从左到右依次停稳后，显示本次奖励。Esc 可以暂停。</p><h3>已装备挂件</h3><p>${state.charms.length?state.charms.map(c=>PRODUCTS[c].name).join('、'):'暂无 · 可在商店购买'}</p><p class="warning-text">会损失投入的图形块，请为每日交付留足材料。</p></aside></div>`,'wide slot-panel');
+  const chips = SHAPES.filter(shape=>tray[shape]).map((shape,i)=>`<span class="payout-group"><span class="payout-stack">${Array.from({length:Math.min(3,tray[shape])},(_,j)=>`<i class="payout-token token-${shape}" style="--drop:${(i*3+j)*.06}s;--tilt:${-12+i*9+j*8}deg;--stack:${j};--shape:${INFO[shape].color}">${INFO[shape].symbol}</i>`).join('')}</span><b>${INFO[shape].name} ×${tray[shape]}</b></span>`).join('');
+  shell('图形俱乐部','THE SHAPE CLUB',`<div class="slot-layout"><div class="slot-cabinet ${rolling?'is-playing':''} ${prize&&spinResult?.wins.length?'is-winning':''} ${locked?'is-locked':''}">
+    <div class="cabinet-crown"><span class="cabinet-lamp"></span><div class="slot-marquee"><small>FOUR WALLS</small><strong>SHAPE CLUB</strong><span>${locked?'OUT OF SERVICE':prize?'COLLECT YOUR SHAPES':'GOOD SHAPES · GOOD LUCK'}</span></div><span class="cabinet-lamp"></span></div>
+    <div class="cabinet-bezel"><div class="slot-machine ${rolling?'spinning':''}" id="reels" aria-busy="${rolling}"></div><div class="reel-stop-indicators" aria-hidden="true">${Array.from({length:4},()=>'<i></i>').join('')}</div></div>
+    <div id="slot-outcome" class="slot-outcome ${locked?'alarm-text':prize?'prize-text':''}" role="status">${outcome}</div>
+    <div class="machine-readouts"><div><span>本次投入</span><b>${INFO[stake].symbol} ×${bet}</b></div><div><span>连续未中</span><b>${losses} 次</b></div><div><span>连败加成</span><b>+${(slotBonus(losses)*100).toFixed(1)}%</b></div></div>
+    <div class="machine-controls"><div class="stake-heading">投入图形 <span>当前持有 ${state.inventory[stake]} 块</span></div><div class="shape-options">${canChoose?options:options.replaceAll('<button ','<button disabled ')}</div>
+    <div class="bet-and-spin"><div class="bet-selector" aria-label="投注倍率">${SLOT_BETS.map(value=>`<button data-bet="${value}" class="bet-button ${bet===value?'selected':''}" ${!canChoose?'disabled':''}>${value}<small>倍</small></button>`).join('')}</div><button class="spin-button" data-action="spin" ${!canChoose||state.inventory[stake]<bet?'disabled':''}><span>${locked?'停机':rolling?'转动中':prize?'待领取':'开 始'}</span><small>${locked?'次日恢复':rolling?'请稍候':prize?'点击出币口':`投入 ${bet} 块`}</small></button></div></div>
+    <div class="outlet-heading"><span>图形出币口</span><small>${prize?'奖励等待领取':'PAYOUT TRAY'}</small></div><button id="payout-tray" class="payout-tray ${prize?'has-payout':''}" data-action="claim-payout" ${rolling||!prize?'disabled':''} aria-label="${prize?`领取 ${prize} 个图形块`:'出币口暂无图形块'}"><span class="outlet-mouth"></span><span class="payout-content">${prize?chips:'<span class="tray-empty">中奖后，图形块会落在这里</span>'}</span><span class="tray-caption">${prize?`点击领取 · 共 ${prize} 块`:'领取后才计入库存'}</span></button>
+    <div class="cabinet-feet"><i></i><span>SHAPES ONLY · NO GOLD</span><i></i></div>
+  </div><aside class="side-card slot-rulebook"><div class="eyebrow">PAY TABLE</div><h3>机台规则</h3><div class="payout"><span>同图形四联</span><b>${15*bet} 块</b></div><div class="payout"><span>同图形三联</span><b>${(state.charms.includes('triple')?6:5)*bet} 块</b></div><div class="payout"><span>同投注图形二联</span><b>返还 ${bet} 块</b></div><p>连线从最左列开始。没有三联或四联时，二联与投入图形相同，返还整笔投入；多条二联只返还一次。</p><h3>连败保护</h3><p>每次未中，三/四联机会增加约1.5个百分点，最多增加15个百分点。三/四联中奖清零；二联返还不增不减。</p><div class="chance-display">当前中间行三/四联机会 <b>${(slotWinChance(losses)*100).toFixed(1)}%</b></div><h3 class="warning-text">炸弹停机</h3><p>任意横排四联炸弹，取消当次奖励并锁定机台至次日。炸弹不能投注或领取。</p><h3>已装备挂件</h3><p>${state.charms.length?state.charms.map(c=>PRODUCTS[c].name).join('、'):'暂无 · 可在商店购买'}</p><p class="muted">出币口中的图形块需点击领取，未领取可关闭界面，回来继续领取。Esc 暂停。</p></aside></div>`,'wide slot-panel');
   slotReels = new SlotReels($('reels'), rolling ? spinStartGrid : spinResult?.grid ?? idleGrid(), rolling ? spinResult!.grid : null, col=>sound(320+col*100,.065));
   stoppedReels = slotReels.update(rolling ? SPIN_DURATION-spinLeft : 0, false);
-  slotReels.highlight([1,...(state.charms.includes('top')?[0]:[]),...(state.charms.includes('bottom')?[2]:[])],rolling?[]:spinResult?.wins);
+  slotReels.highlight(activeSlotRows(state.charms),rolling?[]:spinResult?.wins,!rolling&&locked);
   updateReelStatus(stoppedReels);
 }
 function updateReelStatus(count: number) {
@@ -145,7 +159,7 @@ function metrics() {
   $<HTMLButtonElement>('collect').disabled=!ready;
 }
 function settleDay(forced=false) {
-  drawingDown=false;resetDrawing();const result=sleep(state);save();lastResult=result.failed?'交付处再也没有传来回音。':`${forced?'凌晨两点，你疲惫地睡着了。':'你放下了今天的忙碌。'} 存款利息 +${result.interest} 金币。`;open('result');sound(result.failed?180:620,.3);
+  drawingDown=false;resetDrawing();const result=sleep(state);if('blocked' in result&&result.blocked)return;save();lastResult=result.failed?'交付处再也没有传来回音。':`${forced?'凌晨两点，你疲惫地睡着了。':'你放下了今天的忙碌。'} 存款利息 +${result.interest} 金币。`;open('result');sound(result.failed?180:620,.3);
 }
 
 $('overlay').addEventListener('click',e=>{
@@ -154,27 +168,32 @@ $('overlay').addEventListener('click',e=>{
   if(b.dataset.tab){shopTab=b.dataset.tab;renderShop();return;}
   if(b.dataset.shape){selected=b.dataset.shape as Shape;resetDrawing();renderWork();return;}
   if(b.dataset.stake&&!spinLeft){stake=b.dataset.stake as Shape;renderSlots();return;}
+  if(b.dataset.bet&&!spinLeft){const value=Number(b.dataset.bet) as Bet;if(SLOT_BETS.includes(value)){bet=value;renderSlots();}return;}
   if(b.dataset.buy){if(buy(state,b.dataset.buy as keyof typeof PRODUCTS)){toast('购买成功，补给已放入背包；挂件自动装备。');save();hud();renderShop();}return;}
   if(b.dataset.upgrade){if(upgrade(state,b.dataset.upgrade as 'pen'|'hand')){toast('升级成功');save();hud();renderShop();}return;}
   if(b.dataset.sell){sell(state,b.dataset.sell as Shape);save();hud();renderShop();return;}
   if(b.dataset.use){const shape=$<HTMLSelectElement>('book-shape').value as Shape;useItem(state,b.dataset.use as 'water'|'food'|'books',shape);save();hud();renderBag();return;}
   if(b.dataset.transfer){const n=Number($<HTMLInputElement>('bank-amount').value);if(!transfer(state,n,b.dataset.transfer==='deposit'))toast('请输入有效的整数金额，并确认余额充足。');else{save();hud();renderShop();}return;}
-  if(action==='start'){started=true;modal=null;$('hud').hidden=false;$('overlay').innerHTML='';save();hud();if(state.over){lastResult='这段生活已结束，你可以从第一天重新开始。';open('result');return;}room.lock();toast('走近正前方的画桌，看向桌面并按 E 开始绘画。');return;}
+  if(action==='start'){started=true;modal=null;$('hud').hidden=false;$('overlay').innerHTML='';save();hud();if(state.over){lastResult='这段生活已结束，你可以从第一天重新开始。';open('result');return;}if(state.slot.round){open('slots');toast('继续上次已投入的抽奖，本次不会再次扣除图形块。');return;}room.lock();toast('走近正前方的画桌，看向桌面并按 E 开始绘画。');return;}
   if(action==='close'||action==='resume'){if(spinLeft){modal='slots';paused=false;renderSlots();}else close();return;}
   if(action==='bag'){open('bag');return;}
   if(action==='help'){open('help');return;}
   if(action==='reset-ask'){open('reset');return;}
   if(action==='cancel-reset'){if(started)open('pause');else close();return;}
-  if(action==='reset'){state=fresh();volume=state.volume;loaded=false;started=true;spinLeft=0;spinResult=null;spinStartInventory=null;slotReels=null;resetDrawing();room.camera.position.set(0,1.65,3.7);room.yaw=0;room.pitch=-.08;$('hud').hidden=false;save();close();hud();return;}
+  if(action==='reset'){state=fresh();volume=state.volume;loaded=false;started=true;spinLeft=0;spinResult=null;stake='triangle';bet=1;slotReels=null;resetDrawing();room.camera.position.set(0,1.65,3.7);room.yaw=0;room.pitch=-.08;$('hud').hidden=false;save();close();hud();return;}
   if(action==='clear-drawing'){resetDrawing();paint();metrics();return;}
   if(action==='collect'){lastAssessment=assess(drawPath,strokes,drawingStats(state,selected).tolerance);if(lastAssessment.valid&&drawSeconds>=drawingStats(state,selected).seconds){finishDrawing(state,selected);toast(`完成${INFO[selected].name} +1 · 熟练度 +1`);sound(760,.2);save();hud();resetDrawing();renderWork();}return;}
   if(action==='deliver'){const r=deliver(state);toast(`交付 ${r.delivered} 块${r.wage?`，工资 +${r.wage} 金币`:''}`);save();hud();renderShop();return;}
   if(action==='sleep'){settleDay();return;}
   if(action==='spin'){
     if(spinLeft)return;
-    const visibleInventory={...state.inventory};
-    const result=spin(state,stake);
-    if(result){spinStartGrid=spinResult?.grid??idleGrid();spinStartInventory=visibleInventory;spinStartInventory[stake]--;spinResult=result;spinLeft=SPIN_DURATION;save();hud();renderSlots();sound(250,.2);}
+    const result=spin(state,stake,bet);
+    if(result){spinStartGrid=state.slot.last?.grid??idleGrid();spinResult=result;spinLeft=SPIN_DURATION;save();hud();renderSlots();sound(250,.2);}
+    return;
+  }
+  if(action==='claim-payout'){
+    if(spinLeft)return;
+    const claimed=claimSlotPayout(state);if(sum(claimed)){save();hud();renderSlots();toast(`已领取 ${SHAPES.filter(shape=>claimed[shape]).map(shape=>`${INFO[shape].name} ×${claimed[shape]}`).join('、')}`);sound(860,.18);}
     return;
   }
 });
@@ -204,7 +223,7 @@ function frame(now:number){
     if(spinLeft){
       spinLeft=Math.max(0,spinLeft-dt);
       if(modal==='slots'&&slotReels){const count=slotReels.update(SPIN_DURATION-spinLeft);if(count!==stoppedReels){stoppedReels=count;updateReelStatus(count);}}
-      if(!spinLeft){spinStartInventory=null;if(modal==='slots')renderSlots();hud();sound(spinResult?.wins.length?820:240,.25);}
+      if(!spinLeft){const revealed=revealSpin(state);spinResult=revealed??state.slot.last;save();if(modal==='slots')renderSlots();hud();sound(revealed?.bomb?130:revealed?.wins.length?820:revealed?.refund?520:240,.25);}
     }
     if(state.minute>=CONFIG.dayEnd&&!spinLeft)settleDay(true);
     if(saveElapsed>5){saveElapsed=0;save();}
