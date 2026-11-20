@@ -1,0 +1,74 @@
+/* Touch input is opt-in by device capability, independent of desktop controls. */
+#touch-controls,.touch-back,.touch-hand{display:none}
+html:not(.touch-ui) .touch-hand{display:none!important}
+.touch-ui{--safe-top:env(safe-area-inset-top,0px);--safe-bottom:env(safe-area-inset-bottom,0px)}
+.touch-ui body{overscroll-behavior:none;-webkit-tap-highlight-color:transparent}
+.touch-ui #world canvas{touch-action:none}
+.touch-ui button{min-height:44px;touch-action:manipulation;-webkit-touch-callout:none}
+.touch-ui #touch-controls{position:fixed;right:max(10px,env(safe-area-inset-right));bottom:calc(10px + var(--safe-bottom));width:256px;padding:9px;display:flex;flex-direction:column;align-items:center;gap:9px;z-index:5;background:#152d36dc;border:1px solid #a8c0af40;border-radius:19px;box-shadow:0 6px 25px #071b2780;user-select:none;-webkit-user-select:none;touch-action:none}
+.touch-ui #touch-controls[hidden]{display:none}
+.touch-ui #touch-controls[data-hand=left]{right:auto;left:max(10px,env(safe-area-inset-left))}
+.touch-quick{display:flex;width:100%;gap:4px}
+.touch-quick button{flex:1;min-width:44px;height:44px;padding:0;font-size:13px;background:#304952;border-radius:9px}
+.touch-pad{display:grid;grid-template-columns:repeat(3,62px);gap:7px}
+.touch-pad button{height:54px;min-width:0;padding:3px;border-radius:12px;background:linear-gradient(#38565e,#243e48);border-color:#9db4a94d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;touch-action:none}
+.touch-pad button b{font:500 24px/1 system-ui;color:#eacb91}
+.touch-pad button span{font-size:12px;line-height:1.2}
+.touch-pad button.is-held{background:#b29b6b;border-color:#f5d299;box-shadow:inset 0 3px 8px #283b4055}
+.touch-pad button.is-held b{color:#fff2cb}
+.touch-pad #touch-interact{background:#c6ab76;color:#172e35;border-color:#efcf91}
+.touch-pad #touch-interact b{color:#233e43}
+.touch-ui .topbar{height:calc(54px + var(--safe-top));padding:var(--safe-top) 15px 0;justify-content:space-between;gap:8px}
+.touch-ui .day-clock{gap:12px}.touch-ui .day-clock b{font-size:13px}.touch-ui .day-clock span{font-size:22px}
+.touch-ui .wallet{gap:6px}.touch-ui .wallet b{font-size:18px}
+.touch-ui .hud-toolbar,.touch-ui .task-card,.touch-ui .bottom-right{display:none}
+.touch-ui .bottom-left{left:10px;right:10px;top:calc(58px + var(--safe-top));bottom:auto;width:auto;padding:9px 12px;background:#18313ac9}
+.touch-ui .stats{flex-direction:row;gap:12px}.touch-ui .stat{flex:1;min-width:0;gap:4px;font-size:14px}
+.touch-ui .stat>span{width:auto;white-space:nowrap}.touch-ui .stat b{width:23px;font-size:13px}
+.touch-ui .inventory{margin-top:8px;padding-top:5px;font-size:14px}.touch-ui .inventory b{font-size:21px}
+.touch-ui #interaction{top:46%;max-width:calc(100% - 24px);white-space:normal;text-align:center;font-size:14px;padding:9px 12px}
+.touch-ui.game-panel-open #hud{visibility:hidden}
+.touch-ui #overlay,.touch-ui #explanation-layer{padding:calc(8px + var(--safe-top)) max(8px,env(safe-area-inset-right)) calc(8px + var(--safe-bottom)) max(8px,env(safe-area-inset-left))}
+.touch-ui .panel,.touch-ui .intro{width:min(100%,480px)!important;max-height:calc(100dvh - 16px - var(--safe-top) - var(--safe-bottom));padding:14px!important;border-radius:16px;overflow-x:hidden;overscroll-behavior:contain}
+.touch-ui .intro h1{font-size:clamp(32px,10vw,48px);margin:24px 0 34px}
+.touch-ui .intro h1 span{font-size:15px;letter-spacing:.25em}
+.touch-ui .intro-actions{gap:12px}.touch-ui .intro-actions button{min-height:48px}
+.touch-ui .panel-header{position:sticky;top:-14px;z-index:6;min-height:50px;padding:4px 0 6px;margin-bottom:8px;background:#253c44f5;border-radius:8px;gap:8px}
+.touch-ui .panel-header button{min-width:44px;min-height:44px}.touch-ui .panel-header .save-button{width:64px}
+.touch-ui .touch-hand{display:block}
+.touch-ui .touch-back{display:block;min-height:46px;min-width:86px;margin:0 auto;font-size:15px}
+.touch-ui .panel-footer{position:sticky;bottom:-14px;z-index:5;flex-wrap:wrap;gap:10px 18px;padding:10px 0 0;margin-top:14px;background:#20353df5}
+.touch-ui .panel-footer .touch-back{flex:0 0 100%;margin:0}
+.touch-ui .explanation-window>.touch-back{position:sticky;bottom:0;width:100%;background:#354f56}
+.touch-ui .explanation-content article{padding:12px 2px}.touch-ui .explanation-content p{font-size:15px;line-height:1.85}
+.touch-ui .tabs{gap:0;margin-bottom:16px;display:grid;grid-template-columns:repeat(4,1fr)}
+.touch-ui .tabs button{padding:9px 3px;min-height:48px;font-size:14px;line-height:1.5}
+.touch-ui .two-column{grid-template-columns:1fr;gap:16px}.touch-ui .delivery-row{gap:9px;font-size:14px;padding:12px 0}
+.touch-ui .side-card{padding:15px}.touch-ui .sell-row button{min-width:75px;min-height:44px}
+.touch-ui .product-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.touch-ui .product{min-width:0;min-height:175px;padding:15px 8px}.touch-ui .product h3{font-size:16px}.touch-ui .product h3 span{display:block;margin-left:0}
+.touch-ui .product button{min-height:46px;padding:8px 5px;font-size:14px}
+.touch-ui .bank-input{gap:10px}.touch-ui input,.touch-ui select{font-size:16px}
+.touch-ui .bag-supplies{gap:8px}.touch-ui .bag-supplies article{padding:14px 8px}.touch-ui .bag-supplies h3{font-size:15px}
+.touch-ui .bag-panel .info-box{padding:14px 8px}.touch-ui .bag-panel .info-box label{display:block}.touch-ui .skills{gap:18px}
+.touch-ui .drawing-layout{gap:10px}.touch-ui .drawing-board{width:100%;max-width:350px;padding:9px}
+.touch-ui .work-shapes{width:100%}.touch-ui .work-shapes .shape-choice{min-height:56px;padding:6px 3px;font-size:26px}
+.touch-ui .work-shapes .shape-choice small{font-size:13px}.touch-ui .draw-actions>button{min-height:52px;padding:10px 5px;font-size:15px}
+.touch-ui .tool-levels{gap:8px 14px;font-size:13px;padding-top:10px}.touch-ui .drawing-progress-label{font-size:14px}
+.touch-ui .slot-panel .slot-layout{width:100%}.touch-ui .slot-cabinet{padding:8px 8px 2px;border-width:3px;border-radius:20px 20px 12px 12px}
+.touch-ui .cabinet-crown{padding:3px 6px;gap:4px}.touch-ui .slot-marquee strong{font-size:22px;letter-spacing:.07em}.touch-ui .slot-marquee small{font-size:9px}
+.touch-ui .slot-panel .slot-cabinet .slot-machine{--slot-cell:clamp(40px,11vw,54px);--reel-gap:5px;padding:7px}
+.touch-ui .slot-paylines{inset:7px}.touch-ui .slot-cabinet .reel-symbol{font-size:30px}.touch-ui .slot-cabinet .bomb-art{width:30px;height:30px}
+.touch-ui .slot-cabinet .slot-outcome{font-size:13px;min-height:34px;line-height:1.5}
+.touch-ui .machine-readouts{gap:4px}.touch-ui .machine-readouts>div{flex-direction:column;gap:2px;padding:6px 2px}
+.touch-ui .machine-readouts span{font-size:11px}.touch-ui .machine-readouts b{font-size:15px}
+.touch-ui .machine-controls{padding:7px}.touch-ui .stake-heading{gap:10px!important;font-size:14px}
+.touch-ui .slot-cabinet .shape-options{gap:5px;margin:7px 0}.touch-ui .slot-cabinet .shape-choice{min-height:51px;font-size:25px}.touch-ui .slot-cabinet .shape-choice small{font-size:12px}
+.touch-ui .slot-cabinet .bet-and-spin{gap:9px}.touch-ui .bet-selector{flex:1;gap:6px}.touch-ui .bet-button{min-width:0;flex:1;width:auto;height:46px;font-size:20px}
+.touch-ui .spin-button{min-width:76px;height:57px;padding:3px 7px}.touch-ui .spin-button>span{font-size:15px}
+.touch-ui .outlet-heading{gap:8px!important;letter-spacing:0;font-size:13px}.touch-ui .payout-tray{min-height:85px;padding:7px}
+.touch-ui .payout-content{gap:8px;flex-wrap:wrap}.touch-ui .payout-group>b{font-size:12px}.touch-ui .tray-caption{font-size:12px}
+.touch-ui #toasts{top:calc(68px + var(--safe-top));z-index:40;width:max-content;max-width:92vw}.touch-ui .toast{font-size:14px;padding:11px 15px}
+@media(max-height:650px){.touch-ui .drawing-board{max-width:230px}.touch-ui .panel-header{margin-bottom:5px}.touch-ui .tool-levels{padding-top:7px}.touch-ui .touch-pad button{height:47px}.touch-ui #touch-controls{gap:6px}.touch-ui .sleep-art{font-size:52px;margin:5px 0 12px}}
+@media(orientation:landscape){.touch-ui .bottom-left{right:auto;width:300px}.touch-ui #interaction{top:43%}.touch-ui .drawing-board{max-width:210px}}
+@media(max-width:360px){.touch-ui .slot-cabinet .bet-and-spin{flex-wrap:wrap}.touch-ui .bet-selector{flex-basis:100%}.touch-ui .spin-button{width:100%;height:48px;border-radius:12px}.touch-ui .spin-button>span,.touch-ui .spin-button small{display:inline;margin:0 5px}.touch-ui .stats{gap:7px}}

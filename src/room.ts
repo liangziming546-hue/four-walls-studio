@@ -4,6 +4,8 @@ export const STATION_NAMES: Record<Station, string> = { work: '画桌 · 开始�
 export class Room {
   renderer: THREE.WebGLRenderer; scene = new THREE.Scene(); camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, .1, 60);
   yaw = 0; pitch = -.08; keys = new Set<string>();
+  touchMode = false;
+  touchMove = { forward: 0, side: 0 };
   get locked() { return document.pointerLockElement === this.renderer.domElement; }
   private targets: { mesh: THREE.Object3D; station: Station }[] = [];
   private obstacles: {x:number;z:number;w:number;d:number}[] = [];
@@ -22,7 +24,7 @@ export class Room {
     const sun = new THREE.DirectionalLight('#ffe0af', 3); sun.position.set(-3,7,3); sun.castShadow = true;
     sun.shadow.mapSize.set(2048,2048); sun.shadow.camera.left=-9; sun.shadow.camera.right=9; sun.shadow.camera.top=9; sun.shadow.camera.bottom=-9; sun.shadow.normalBias=.025; this.scene.add(sun);
     this.build();
-    addEventListener('resize', () => { this.camera.aspect=innerWidth/innerHeight; this.camera.updateProjectionMatrix(); this.renderer.setSize(innerWidth,innerHeight);this.lastView=''; });
+    addEventListener('resize', () => { this.camera.aspect=innerWidth/innerHeight;this.camera.fov=this.touchMode&&innerWidth<innerHeight?85:70; this.camera.updateProjectionMatrix(); this.renderer.setSize(innerWidth,innerHeight);this.lastView=''; });
     document.addEventListener('pointerlockchange', () => { this.keys.clear(); });
     addEventListener('keydown', e => { if (!e.ctrlKey && !e.metaKey && !e.altKey && !['INPUT','SELECT'].includes((e.target as HTMLElement).tagName)) this.keys.add(e.code); });
     addEventListener('keyup', e => this.keys.delete(e.code)); addEventListener('blur', () => this.keys.clear());
@@ -89,12 +91,17 @@ export class Room {
     for(let i=0;i<7;i++) { const leaf=this.box(4.8+Math.sin(i)*.22,.8+i*.09,-4.9+Math.cos(i)*.2,.12,.65,.18,'#567c63');leaf.rotation.z=Math.sin(i)*.5; }
     for(const x of [-3.3,3.3]) b(x,4.4,0,.17,.3,14,'#344b50');
   }
-  async lock() { try { await this.renderer.domElement.requestPointerLock(); } catch { /* Browser may require another click. */ } }
-  unlock() { if(document.pointerLockElement) document.exitPointerLock();this.keys.clear(); }
+  setTouchMode(enabled: boolean) {
+    this.touchMode=enabled;this.renderer.setPixelRatio(Math.min(devicePixelRatio,enabled?1.25:1.75));
+    this.camera.fov=enabled&&innerWidth<innerHeight?85:70;this.camera.updateProjectionMatrix();this.lastView='';
+  }
+  look(dx: number, dy: number) { this.yaw -= dx; this.pitch = THREE.MathUtils.clamp(this.pitch - dy, -1.15, 1.15); }
+  async lock() { if(this.touchMode)return;try { await this.renderer.domElement.requestPointerLock(); } catch { /* Browser may require another click. */ } }
+  unlock() { if(document.pointerLockElement) document.exitPointerLock();this.keys.clear();this.touchMove.forward=0;this.touchMove.side=0; }
   update(dt:number,active:boolean) {
     this.camera.rotation.y=this.yaw;this.camera.rotation.x=this.pitch;
-    if(active && this.locked) {
-      const forward=Number(this.keys.has('KeyW'))-Number(this.keys.has('KeyS')),side=Number(this.keys.has('KeyD'))-Number(this.keys.has('KeyA'));
+    if(active && (this.locked || this.touchMode)) {
+      const forward=Number(this.keys.has('KeyW'))-Number(this.keys.has('KeyS'))+this.touchMove.forward,side=Number(this.keys.has('KeyD'))-Number(this.keys.has('KeyA'))+this.touchMove.side;
       const length=Math.hypot(forward,side)||1,speed=3*dt/length;
       const dx=(-Math.sin(this.yaw)*forward+Math.cos(this.yaw)*side)*speed,dz=(-Math.cos(this.yaw)*forward-Math.sin(this.yaw)*side)*speed;
       const clear=(x:number,z:number)=>Math.abs(x)<6.5&&Math.abs(z)<6.5&&!this.obstacles.some(o=>Math.abs(x-o.x)<o.w/2+.24&&Math.abs(z-o.z)<o.d/2+.24);
@@ -106,6 +113,18 @@ export class Room {
   }
   target():Station|null {
     this.ray.setFromCamera(new THREE.Vector2(0,0),this.camera);this.ray.far=3.3;
-    const hit=this.ray.intersectObjects(this.targets.map(t=>t.mesh),false)[0];return hit?this.targets.find(t=>t.mesh===hit.object)!.station:null;
+    const hit=this.ray.intersectObjects(this.targets.map(t=>t.mesh),false)[0];
+    if(hit)return this.targets.find(t=>t.mesh===hit.object)!.station;
+    // Touch players can interact with nearby furniture they face without
+    // needing to aim precisely down at a tabletop with a small screen.
+    if(this.touchMode){
+      const p=this.camera.position;let nearest:Station|null=null,distance=3.3;
+      for(const t of this.targets){
+        const dx=t.mesh.position.x-p.x,dz=t.mesh.position.z-p.z,d=Math.hypot(dx,dz);
+        if(d<distance&&(-Math.sin(this.yaw)*dx-Math.cos(this.yaw)*dz)/Math.max(d,.001)>.65){nearest=t.station;distance=d;}
+      }
+      return nearest;
+    }
+    return null;
   }
 }

@@ -1,11 +1,13 @@
 import './style.css';
 import './slots.css';
 import './centered.css';
+import './mobile.css';
 import { Room, STATION_NAMES, type Station } from './room';
 import { SHAPES, INFO, CONFIG, PRODUCTS, SAVE_KEY, fresh, decode, quota, sum, timeLabel, tick, drawingStats, proficiency, finishDrawing, deliver, sleep, buy, useItem, upgrade, transfer, sell, spin, revealSpin, claimSlotPayout, activeSlotRows, SLOT_BETS, slotBonus, slotWinChance, type Shape, type Bet, type SlotRound } from './game';
 import { outline, assess, traceOutline, type Point } from './drawing';
 import { SlotReels, SPIN_DURATION, idleGrid } from './slot-reels';
 import { explanation, type HelpContext } from './help';
+import { TouchControls } from './touch-controls';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML = `
@@ -17,7 +19,7 @@ app.innerHTML = `
     <section class="bottom-left"><div class="stats" id="stats"></div><div class="inventory" id="inventory"></div></section>
     <div class="bottom-right"><button id="bag-button">背包 <kbd>B</kbd></button><span id="save-status">本地自动存档</span></div>
   </div>
-  <div id="overlay"></div><div id="explanation-layer" hidden></div><div id="toasts" aria-live="polite"></div>`;
+  <div id="touch-controls" hidden aria-label="触屏操作"></div><div id="overlay"></div><div id="explanation-layer" hidden></div><div id="toasts" aria-live="polite"></div>`;
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 let state = fresh(), loaded = false;
 try { const saved = decode(localStorage.getItem(SAVE_KEY)); if (saved) { state = saved; loaded = true; } } catch { /* Play remains available if storage is blocked. */ }
@@ -26,12 +28,22 @@ try { room = new Room($('world')); } catch {
   $('overlay').innerHTML = '<section class="panel"><h1>暂时无法启动3D场景</h1><p>请在支持 WebGL 的电脑浏览器中打开，并开启浏览器的硬件加速。</p></section>';
   throw new Error('WebGL unavailable');
 }
-let started = false, paused = false, modal: Station | 'bag' | 'pause' | 'result' | 'reset' | null = null;
+let started = false, paused = false, modal: Station | 'bag' | 'pause' | 'result' | 'reset' | 'tasks' | null = null;
 let explanationOpen = false, explanationWasPaused = false, explanationFocus: HTMLElement | null = null;
 let shopTab = 'delivery', selected: Shape = 'triangle', stake: Shape = state.slot.round?.stake ?? 'triangle', bet: Bet = state.slot.round?.multiplier ?? 1;
 let spinLeft = state.slot.round ? SPIN_DURATION : 0, spinResult: SlotRound | null = state.slot.round ?? state.slot.last, lastResult = '', saveElapsed = 0;
 let spinStartGrid = state.slot.last?.grid ?? idleGrid(), slotReels: SlotReels | null = null, stoppedReels = 0;
 let volume = state.volume, audio: AudioContext | null = null;
+const touchControls = new TouchControls($('touch-controls'),room,()=>started&&!paused&&!modal&&!explanationOpen&&!document.hidden&&!state.over,interact,action=>{
+  if(action==='save')manualSave();
+  if(action==='help')openExplanation();
+  if(action==='tasks'||action==='bag'||action==='pause')open(action);
+});
+function interact() {
+  if(!started||modal||paused||explanationOpen)return;
+  const target=room.target();if(!target)return;
+  if(target==='work')resetDrawing();if(target==='shop')shopTab='delivery';open(target);
+}
 const shapeName = (s: Shape) => `${INFO[s].symbol} ${INFO[s].name}`;
 const shapeChip = (s: Shape, text = '') => `<span class="shape-chip" style="--shape:${INFO[s].color}"><b>${INFO[s].symbol}</b>${text || INFO[s].name}</span>`;
 function toast(message: string) { const el = document.createElement('div'); el.className = 'toast'; el.textContent = message; $('toasts').append(el); setTimeout(() => el.remove(), 4200); }
@@ -55,16 +67,17 @@ function intro() {
   $('overlay').innerHTML = `<section class="intro"><div class="panel-header"><button class="explain-button" data-action="explain" aria-label="查看说明">?</button></div><h1>四面之间<span>画室生存记</span></h1><div class="intro-actions"><button class="primary" data-action="start">${loaded?'继续生活':'开始第一天'}</button>${loaded?'<button data-action="reset-ask">重新开始</button>':''}</div></section>`;
 }
 function shell(title: string, eyebrow: string, content: string, cls='') {
-  $('overlay').innerHTML = `<section class="panel ${cls}" data-screen="${modal}" role="dialog" aria-modal="true" aria-label="${title}"><header class="panel-header"><button class="save-button" data-action="manual-save" aria-label="保存进度">保存</button><button class="explain-button" data-action="explain" aria-label="查看说明">?</button>${modal!=='result'?'<button class="close" data-action="close" aria-label="关闭">×</button>':''}</header>${content}<footer class="panel-footer"><span>${timeLabel(state.minute)}${paused?' · 暂停':''}</span><span>金币 ${state.coins}</span></footer></section>`;
+  $('overlay').innerHTML = `<section class="panel ${cls}" data-screen="${modal}" role="dialog" aria-modal="true" aria-label="${title}"><header class="panel-header"><button class="save-button" data-action="manual-save" aria-label="保存进度">保存</button><button class="explain-button" data-action="explain" aria-label="查看说明">?</button>${modal!=='result'?'<button class="close" data-action="close" aria-label="关闭">×</button>':''}</header>${content}<footer class="panel-footer"><span>${timeLabel(state.minute)}${paused?' · 暂停':''}</span><span>金币 ${state.coins}</span>${modal!=='result'?`<button class="touch-back" data-action="touch-back">${spinLeft&&modal==='slots'?'暂停':'返回'}</button>`:''}</footer></section>`;
 }
 function openExplanation() {
   if (explanationOpen) return;
   explanationOpen=true; explanationWasPaused=paused; explanationFocus=document.activeElement instanceof HTMLElement?document.activeElement:null;
   paused=true; drawingDown=false; autoHeld=false; room.unlock();
+  touchControls.clear();
   const context:HelpContext = !started&&!modal?'intro':modal??'general';
   $('overlay').inert=true; $('hud').inert=true;
   $('explanation-layer').hidden=false;
-  $('explanation-layer').innerHTML=`<section class="panel explanation-window" role="dialog" aria-modal="true" aria-label="操作说明"><header class="panel-header"><button class="close" data-action="close-explanation" aria-label="关闭说明">×</button></header><div class="explanation-content">${explanation(context)}</div></section>`;
+  $('explanation-layer').innerHTML=`<section class="panel explanation-window" role="dialog" aria-modal="true" aria-label="操作说明"><header class="panel-header"><button class="close" data-action="close-explanation" aria-label="关闭说明">×</button></header><div class="explanation-content">${explanation(context,room.touchMode)}</div><button class="touch-back" data-action="close-explanation">返回游戏</button></section>`;
   $('explanation-layer').querySelector<HTMLButtonElement>('button')!.focus();metrics();hud();
 }
 function closeExplanation() {
@@ -76,7 +89,7 @@ function closeExplanation() {
 }
 function open(next: NonNullable<typeof modal>) {
   if (spinLeft && next !== 'pause' && next !== 'slots') { toast('请等待本次旋转结束'); return; }
-  modal=next; paused=next==='pause'||next==='reset'||next==='result';room.unlock();drawingDown=false;autoHeld=false;
+  modal=next; paused=next==='pause'||next==='reset'||next==='result'||next==='tasks';room.unlock();touchControls.clear();drawingDown=false;autoHeld=false;
   renderPanel();hud();
 }
 function close() {
@@ -93,7 +106,8 @@ function renderPanel() {
   if (modal==='bed') shell('今天，做到这里吧','',`<div class="sleep-art">☾</div><div class="summary-grid"><div><span>当前时间</span><b>${timeLabel(state.minute)}</b></div><div><span>次日精神</span><b>${Math.round(Math.max(60,100-Math.max(0,state.minute-1320)/60*10))}</b></div><div><span>今日待交</span><b>${sum(state.due)-sum(state.paid)} 块</b></div><div><span>旧欠额</span><b>${sum(state.debt)} 块</b></div></div><button class="primary full" data-action="sleep">确认睡觉，结束今天</button>`,'narrow');
   if (modal==='letters') shell('书桌','',`<div class="sleep-art">✉</div><div class="center-status">尚未开放</div>`,'narrow');
   if (modal==='bag') renderBag();
-  if (modal==='pause') shell('歇一会儿','',`<button class="primary full" data-action="resume">继续游戏</button><label class="volume">音效音量 <input id="volume" aria-label="音效音量" type="range" min="0" max="1" step="0.05" value="${volume}"></label><div class="summary-grid"><div><span>画笔</span><b>Lv.${state.pen}</b></div><div><span>手部控制</span><b>Lv.${state.hand}</b></div><div><span>存款</span><b>${state.bank}</b></div></div><button class="text-button" data-action="reset-ask">重新开始游戏</button>`,'narrow');
+  if (modal==='pause') shell('歇一会儿','',`<button class="primary full" data-action="resume">继续游戏</button><button class="touch-hand full" data-action="touch-hand">改为${touchControls.hand==='right'?'左':'右'}手操作</button><label class="volume">音效音量 <input id="volume" aria-label="音效音量" type="range" min="0" max="1" step="0.05" value="${volume}"></label><div class="summary-grid"><div><span>画笔</span><b>Lv.${state.pen}</b></div><div><span>手部控制</span><b>Lv.${state.hand}</b></div><div><span>存款</span><b>${state.bank}</b></div></div><button class="text-button" data-action="reset-ask">重新开始游戏</button>`,'narrow');
+  if (modal==='tasks') shell('今日任务','',`<div class="section-label">今日交付 · ${state.wageClaimed?'已完成':`工资 ${sum(state.due)*8} 金币`}</div>${$('task-list').innerHTML}<div class="debt">${$('debt').innerHTML}</div><div class="bank-summary">${$('tomorrow').textContent}</div>`,'narrow');
   if (modal==='reset') shell('重新开始这段生活？','',`<div class="center-status">清除当前进度并重新开始？</div><div class="button-row"><button data-action="cancel-reset">保留进度</button><button class="danger" data-action="reset">确认重新开始</button></div>`,'narrow');
   if (modal==='result') shell(state.over?'这段生活，暂时结束了':'新的一天，开始了','',`<div class="sleep-art">${state.over?'◇':'☀'}</div><div class="center-status">${state.over?'游戏结束':`第 ${state.day} 天`}</div><div class="summary-grid"><div><span>饥饿</span><b>${Math.round(state.hunger)}</b></div><div><span>口渴</span><b>${Math.round(state.thirst)}</b></div><div><span>精神</span><b>${Math.round(state.energy)}</b></div><div><span>欠额</span><b>${sum(state.debt)} 块</b></div><div><span>连续欠额</span><b>${state.debtDays}/3 天</b></div><div><span>存款</span><b>${state.bank}</b></div></div><button class="primary full" data-action="${state.over?'reset':'close'}">${state.over?'重新开始':'迎接今天'}</button>`,'narrow');
 }
@@ -217,6 +231,8 @@ $('overlay').addEventListener('click',e=>{
   if(b.dataset.use){const shape=$<HTMLSelectElement>('book-shape').value as Shape;useItem(state,b.dataset.use as 'water'|'food'|'books',shape);save();hud();renderBag();return;}
   if(b.dataset.transfer){const n=Number($<HTMLInputElement>('bank-amount').value);if(!transfer(state,n,b.dataset.transfer==='deposit'))toast('金额无效或余额不足');else{save();hud();renderShop();}return;}
   if(action==='manual-save'){manualSave();return;}
+  if(action==='touch-hand'){touchControls.switchHand();renderPanel();return;}
+  if(action==='touch-back'){if(spinLeft&&modal==='slots')open('pause');else if(spinLeft){modal='slots';paused=false;renderSlots();}else close();return;}
   if(action==='start'){started=true;modal=null;$('hud').hidden=false;$('overlay').innerHTML='';save();hud();if(state.over){lastResult='这段生活已结束，你可以从第一天重新开始。';open('result');return;}if(state.slot.round){open('slots');return;}room.lock();return;}
   if(action==='close'||action==='resume'){if(spinLeft){modal='slots';paused=false;renderSlots();}else close();return;}
   if(action==='bag'){open('bag');return;}
@@ -242,8 +258,8 @@ $('overlay').addEventListener('click',e=>{
 $('overlay').addEventListener('input',e=>{if((e.target as HTMLElement).id==='volume'){volume=Number((e.target as HTMLInputElement).value);save();}});
 $('pause-button').onclick=()=>open('pause');$('bag-button').onclick=()=>open('bag');$('help-button').onclick=()=>openExplanation();$('save-button').onclick=manualSave;
 $('explanation-layer').onclick=e=>{if((e.target as HTMLElement).closest('[data-action="close-explanation"]'))closeExplanation();};
-$('world').onclick=()=>{if(started&&!modal){const target=room.locked?room.target():null;if(target){if(target==='work')resetDrawing();if(target==='shop')shopTab='delivery';open(target);}else room.lock();}};
-document.addEventListener('pointerlockchange',()=>{if(started&&!document.pointerLockElement&&!modal&&!explanationOpen){open('pause');}});
+$('world').onclick=()=>{if(room.touchMode)return;if(started&&!modal){if(room.locked&&room.target())interact();else room.lock();}};
+document.addEventListener('pointerlockchange',()=>{if(!room.touchMode&&started&&!document.pointerLockElement&&!modal&&!explanationOpen){open('pause');}});
 document.addEventListener('visibilitychange',()=>{last=performance.now();if(document.hidden&&started){save();drawingDown=false;autoHeld=false;if(!modal&&!explanationOpen)open('pause');}});
 addEventListener('blur',()=>{drawingDown=false;autoHeld=false;metrics();});
 addEventListener('beforeunload',()=>{if(started)save();});
@@ -277,10 +293,13 @@ function frame(now:number){
     if(state.minute>=CONFIG.dayEnd&&!spinLeft)settleDay(true);
     if(saveElapsed>5){saveElapsed=0;save();}
   }
-  room.update(dt,active&&!modal);
+  const worldActive=active&&!modal&&!explanationOpen;
+  touchControls.update(dt,worldActive,worldActive&&room.touchMode&&!!room.target());
+  document.documentElement.classList.toggle('game-panel-open',!!modal||explanationOpen);
+  room.update(dt,worldActive);
   hudElapsed+=dt;if(hudElapsed>.25){hudElapsed=0;if(started)hud();const footer=document.querySelector('.panel-footer span');if(footer)footer.textContent=`${timeLabel(state.minute)}${paused?' · 暂停':''}`;}
   const target=active&&!modal?room.target():null;
-  $('interaction').innerHTML=target?`<kbd>E</kbd> ${STATION_NAMES[target]}`:started&&!modal&&!room.locked?'点击画面，继续观察房间':'';
+  $('interaction').innerHTML=target?`${room.touchMode?'':'<kbd>E</kbd> '}${STATION_NAMES[target]}`:started&&!modal&&!room.locked&&!room.touchMode?'点击画面，继续观察房间':'';
   requestAnimationFrame(frame);
 }
 intro();hud();requestAnimationFrame(frame);

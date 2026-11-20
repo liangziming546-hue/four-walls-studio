@@ -1,6 +1,6 @@
-export type HelpContext = 'intro' | 'work' | 'shop' | 'bag' | 'slots' | 'bed' | 'letters' | 'pause' | 'reset' | 'result' | 'general';
+export type HelpContext = 'intro' | 'work' | 'shop' | 'bag' | 'slots' | 'bed' | 'letters' | 'pause' | 'reset' | 'result' | 'general' | 'tasks';
 const guide = (title: string, text: string) => `<article><h3>${title}</h3><p>${text}</p></article>`;
-export function explanation(context: HelpContext): string {
+export function explanation(context: HelpContext, touch = false): string {
   const saving = guide('保存进度', '右上角“保存”按钮或Ctrl+S可立即保存，成功后会显示提示；自动存档仍会运行。进度保存在当前浏览器，包含库存、金币、成长、抽奖结果和待领出币，不保存未完成笔迹或玩家位置。');
   const topics: Record<HelpContext, string> = {
     intro: guide('房间里的生活', '在工作区描画图形，交付每日订单获得金币。购买补给和升级，或用多余图形参与老虎机游戏。进度自动保存在当前浏览器。') + guide('操作', 'WASD移动，鼠标观察，走近物品后按E或点击互动。B打开背包，H打开说明，Esc暂停。') + saving,
@@ -13,7 +13,9 @@ export function explanation(context: HelpContext): string {
     pause: guide('暂停', '暂停时游戏时间、绘画和滚筒转动都会停止。继续游戏后恢复。切换到其他页面也会停止计时。音量滑块调整游戏音效。') + saving,
     reset: guide('重新开始', '确认后将清除当前浏览器中的游戏进度，从第一天开始。此操作包括金币、库存、存款、升级和出币口中的奖励。'),
     result: guide('每日结算', '日结会处理交付欠额、存款利息和睡眠恢复。新的一天重新生成任务，机台解除当日停用。若连续3次日结仍有欠额，本次游戏结束。'),
+    tasks: guide('今日任务', '先在工作区绘画，再走到商店交付。交足今日任务后自动领取工资，旧欠额需要优先补齐；查看任务时游戏暂停。'),
     general: guide('移动与互动', 'WASD移动，鼠标观察。走近物品后按E或点击互动。B打开背包，H打开说明，Esc暂停。点击画面可恢复鼠标控制。') + guide('每日生活', '描画图形、完成订单并领取工资，再购买补给与升级。金币用于购买和存款；图形块用于交付、售卖或老虎机。尽早睡觉能为明天保留精神。') + guide('查看规则', '每个窗口右上角的“？”都能打开对应说明，关闭说明会回到原窗口。阅读说明时游戏暂停。') + saving,
   };
-  return topics[context];
+  const mobile = guide('手机单手操作', '竖屏游玩时，底部操作区可长按前进、后退、左移、右移；左转、右转、抬头和低头可调整视角，也可以直接滑动画面。靠近并朝向物品后，点击中间“互动”或轻点画面。底部快捷按钮可打开任务、背包、保存、暂停和说明。暂停里可切换左手或右手布局。手指沿画板虚线描画，或长按自动画图；松手即停止。窗口底部“返回”回到房间，转动中的老虎机可在此暂停。');
+  return touch ? mobile + topics[context] : topics[context];
 }
