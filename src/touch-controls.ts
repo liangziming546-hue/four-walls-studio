@@ -22,6 +22,16 @@ export class TouchControls {
     };
     mode();this.media.addEventListener('change',mode);
     host.addEventListener('contextmenu',e=>e.preventDefault());
+    host.addEventListener('selectstart',e=>e.preventDefault());
+    host.addEventListener('dragstart',e=>e.preventDefault());
+    // Safari's native long-press selection can start from touch events even
+    // when pointerdown was cancelled. Block it only for held movement buttons;
+    // interaction and shortcut buttons retain their normal tap/click behavior.
+    host.addEventListener('touchstart',e=>{
+      const b=(e.target as HTMLElement).closest<HTMLButtonElement>('[data-touch]');
+      if(b&&!b.disabled&&b.dataset.touch!=='interact'&&this.canPlay()&&e.cancelable)e.preventDefault();
+    },{passive:false});
+    host.addEventListener('touchmove',e=>{if(this.held.size&&e.cancelable)e.preventDefault();},{passive:false});
     host.addEventListener('click',e=>{
       const b=(e.target as HTMLElement).closest<HTMLButtonElement>('button');if(!b||b.disabled||!this.canPlay())return;
       if(b.dataset.touch==='interact')this.interact();

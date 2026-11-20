@@ -23,6 +23,24 @@ async function fits(page:Page,selector='.panel'){
   }
 }
 
+test('长按按钮文字不选中、不弹菜单，松手停止且快捷按钮仍可点击',async({browser})=>{
+  const {page,context,cdp}=await setup(browser);
+  try{
+    await page.getByRole('button',{name:'继续生活'}).tap();
+    const button=page.locator('[data-touch="back"]');await expect(button).toBeVisible();
+    const protections=await button.locator('span').evaluate(el=>{
+      const css=getComputedStyle(el);
+      return {select:css.userSelect,webkit:css.getPropertyValue('-webkit-user-select'),pointer:css.pointerEvents,
+        selectionBlocked:!el.dispatchEvent(new Event('selectstart',{bubbles:true,cancelable:true})),
+        menuBlocked:!el.dispatchEvent(new Event('contextmenu',{bubbles:true,cancelable:true}))};
+    });
+    expect(protections).toMatchObject({select:'none',webkit:'none',pointer:'none',selectionBlocked:true,menuBlocked:true});
+    await down(cdp,button);await page.waitForTimeout(1800);await expect(button).toHaveClass(/is-held/);await up(cdp);
+    await expect(button).not.toHaveClass(/is-held/);expect(await page.evaluate(()=>getSelection()?.toString())).toBe('');
+    await page.locator('[data-touch-quick="pause"]').tap();await expect(page.locator('[data-screen="pause"]')).toBeVisible();
+  }finally{await context.close();}
+});
+
 test('手机无需鼠标锁定，单指移动、转向、取消手势、互动和左右手切换',async({browser})=>{
   const {page,context,cdp}=await setup(browser);const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
   try{

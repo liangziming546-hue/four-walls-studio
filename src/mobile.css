@@ -7,6 +7,8 @@ html:not(.touch-ui) .touch-hand{display:none!important}
 .touch-ui button{min-height:44px;touch-action:manipulation;-webkit-touch-callout:none}
 .touch-ui #touch-controls{position:fixed;right:max(10px,env(safe-area-inset-right));bottom:calc(10px + var(--safe-bottom));width:256px;padding:9px;display:flex;flex-direction:column;align-items:center;gap:9px;z-index:5;background:#152d36dc;border:1px solid #a8c0af40;border-radius:19px;box-shadow:0 6px 25px #071b2780;user-select:none;-webkit-user-select:none;touch-action:none}
 .touch-ui #touch-controls[hidden]{display:none}
+.touch-ui #touch-controls,.touch-ui #touch-controls *{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none}
+.touch-pad button>*{pointer-events:none}
 .touch-ui #touch-controls[data-hand=left]{right:auto;left:max(10px,env(safe-area-inset-left))}
 .touch-quick{display:flex;width:100%;gap:4px}
 .touch-quick button{flex:1;min-width:44px;height:44px;padding:0;font-size:13px;background:#304952;border-radius:9px}
